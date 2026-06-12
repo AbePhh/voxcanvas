@@ -1,0 +1,44 @@
+.command-preview {
+  border: 1px solid #e5e7eb;
+  padding: 12px;
+  background: #f8fafc;
+}
+
+.command-preview h3 {
+  margin: 0 0 8px;
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.command-preview p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.parse-ok {
+  color: #166534;
+}
+
+.parse-error {
+  color: #b91c1c;
+}
+
+.parse-empty {
+  color: #6b7280;
+}
+
+.command-preview pre {
+  max-height: 200px;
+  overflow: auto;
+  margin: 10px 0 0;
+  border: 1px solid #e5e7eb;
+  padding: 10px;
+  background: #ffffff;
+  color: #374151;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
