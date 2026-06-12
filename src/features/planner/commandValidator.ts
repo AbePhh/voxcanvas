@@ -51,27 +51,37 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
-function validateTarget(value: unknown): value is CommandTarget {
+function normalizeTarget(value: unknown): CommandTarget | null {
+  if (typeof value === 'string' && allowedTargetModes.has(value)) {
+    return {
+      mode: value as CommandTarget['mode'],
+    }
+  }
+
   if (!isRecord(value) || typeof value.mode !== 'string') {
-    return false
+    return null
   }
 
   if (!allowedTargetModes.has(value.mode)) {
-    return false
+    return null
   }
 
   if (value.shape !== undefined && !allowedShapes.has(value.shape as ShapeKind)) {
-    return false
+    return null
   }
 
   if (
     value.position !== undefined &&
     !allowedPositions.has(value.position as CommandPosition)
   ) {
-    return false
+    return null
   }
 
-  return true
+  return {
+    mode: value.mode as CommandTarget['mode'],
+    shape: value.shape as ShapeKind | undefined,
+    position: value.position as CommandPosition | undefined,
+  }
 }
 
 export function validatePlannedCommand(rawValue: unknown): CommandPlannerResult {
@@ -133,7 +143,9 @@ export function validatePlannedCommand(rawValue: unknown): CommandPlannerResult 
       }
     }
 
-    if (!allowedSizes.has(rawValue.size as CommandSize)) {
+    const size = rawValue.size ?? 'medium'
+
+    if (!allowedSizes.has(size as CommandSize)) {
       return {
         status: 'invalid',
         reason: 'invalid-create-size',
@@ -149,7 +161,7 @@ export function validatePlannedCommand(rawValue: unknown): CommandPlannerResult 
         shape: rawValue.shape as ShapeKind,
         color: rawValue.color as CommandColor | undefined,
         position: rawValue.position as CommandPosition | undefined,
-        size: rawValue.size as CommandSize,
+        size: size as CommandSize,
         text: typeof rawValue.text === 'string' ? rawValue.text : undefined,
         sourceText,
       },
@@ -157,7 +169,9 @@ export function validatePlannedCommand(rawValue: unknown): CommandPlannerResult 
   }
 
   if (rawValue.action === 'move') {
-    if (!validateTarget(rawValue.target)) {
+    const target = normalizeTarget(rawValue.target)
+
+    if (!target) {
       return {
         status: 'invalid',
         reason: 'invalid-move-target',
@@ -187,7 +201,7 @@ export function validatePlannedCommand(rawValue: unknown): CommandPlannerResult 
         source: 'ai',
         command: {
           action: 'move',
-          target: rawValue.target,
+          target,
           mode: 'absolute',
           position: rawValue.position as CommandPosition,
           sourceText,
@@ -208,7 +222,7 @@ export function validatePlannedCommand(rawValue: unknown): CommandPlannerResult 
       source: 'ai',
       command: {
         action: 'move',
-        target: rawValue.target,
+        target,
         mode: 'relative',
         direction: rawValue.direction as 'left' | 'right' | 'up' | 'down',
         distance: typeof rawValue.distance === 'number' ? rawValue.distance : 48,
@@ -218,7 +232,9 @@ export function validatePlannedCommand(rawValue: unknown): CommandPlannerResult 
   }
 
   if (rawValue.action === 'recolor') {
-    if (!validateTarget(rawValue.target) || !allowedColors.has(rawValue.color as CommandColor)) {
+    const target = normalizeTarget(rawValue.target)
+
+    if (!target || !allowedColors.has(rawValue.color as CommandColor)) {
       return {
         status: 'invalid',
         reason: 'invalid-recolor-command',
@@ -231,7 +247,7 @@ export function validatePlannedCommand(rawValue: unknown): CommandPlannerResult 
       source: 'ai',
       command: {
         action: 'recolor',
-        target: rawValue.target,
+        target,
         color: rawValue.color as CommandColor,
         sourceText,
       },
@@ -239,8 +255,10 @@ export function validatePlannedCommand(rawValue: unknown): CommandPlannerResult 
   }
 
   if (rawValue.action === 'resize') {
+    const target = normalizeTarget(rawValue.target)
+
     if (
-      !validateTarget(rawValue.target) ||
+      !target ||
       !allowedResizeDirections.has(rawValue.direction as string)
     ) {
       return {
@@ -255,7 +273,7 @@ export function validatePlannedCommand(rawValue: unknown): CommandPlannerResult 
       source: 'ai',
       command: {
         action: 'resize',
-        target: rawValue.target,
+        target,
         direction: rawValue.direction as 'larger' | 'smaller',
         sourceText,
       },
@@ -263,7 +281,9 @@ export function validatePlannedCommand(rawValue: unknown): CommandPlannerResult 
   }
 
   if (rawValue.action === 'delete') {
-    if (!validateTarget(rawValue.target)) {
+    const target = normalizeTarget(rawValue.target)
+
+    if (!target) {
       return {
         status: 'invalid',
         reason: 'invalid-delete-target',
@@ -276,7 +296,7 @@ export function validatePlannedCommand(rawValue: unknown): CommandPlannerResult 
       source: 'ai',
       command: {
         action: 'delete',
-        target: rawValue.target,
+        target,
         sourceText,
       },
     }
