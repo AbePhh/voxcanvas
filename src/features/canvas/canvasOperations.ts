@@ -1,9 +1,11 @@
 import type {
+  CanvasResizeAnchor,
   CommandTarget,
   CreateShapeCommand,
   DeleteShapeCommand,
   MoveShapeCommand,
   RecolorShapeCommand,
+  ResizeCanvasCommand,
   ResizeShapeCommand,
 } from '../commands/types'
 import { colorStyles } from './colorStyles'
@@ -30,6 +32,8 @@ function createShapeId(shape: string) {
 
 function takeSnapshot(state: CanvasState): CanvasSnapshot {
   return {
+    width: state.width,
+    height: state.height,
     shapes: state.shapes,
     selectedId: state.selectedId,
   }
@@ -38,8 +42,46 @@ function takeSnapshot(state: CanvasState): CanvasSnapshot {
 function restoreSnapshot(state: CanvasState, snapshot: CanvasSnapshot): CanvasState {
   return {
     ...state,
+    width: snapshot.width,
+    height: snapshot.height,
     shapes: snapshot.shapes,
     selectedId: snapshot.selectedId,
+  }
+}
+
+function clampCanvasDimension(value: number) {
+  return Math.max(320, Math.min(2400, Math.round(value)))
+}
+
+function getCanvasResizeOffset(
+  widthDelta: number,
+  heightDelta: number,
+  anchor: CanvasResizeAnchor = 'center',
+) {
+  const horizontalAnchor = anchor.includes('left')
+    ? 'left'
+    : anchor.includes('right')
+      ? 'right'
+      : anchor
+  const verticalAnchor = anchor.includes('top')
+    ? 'top'
+    : anchor.includes('bottom')
+      ? 'bottom'
+      : anchor
+
+  return {
+    x:
+      horizontalAnchor === 'left'
+        ? widthDelta
+        : horizontalAnchor === 'right'
+          ? 0
+          : Math.round(widthDelta / 2),
+    y:
+      verticalAnchor === 'top'
+        ? heightDelta
+        : verticalAnchor === 'bottom'
+          ? 0
+          : Math.round(heightDelta / 2),
   }
 }
 
@@ -265,6 +307,56 @@ export function applyResizeCommand(
       y: Math.round(centerY - nextHeight / 2),
     }
   })
+}
+
+export function applyResizeCanvasCommand(
+  state: CanvasState,
+  command: ResizeCanvasCommand,
+): CanvasState {
+  const nextSize =
+    command.mode === 'absolute'
+      ? {
+          width: command.width,
+          height: command.height,
+        }
+      : {
+          width:
+            command.direction === 'wider' || command.direction === 'larger'
+              ? state.width + (command.amount ?? 120)
+              : command.direction === 'narrower' || command.direction === 'smaller'
+                ? state.width - (command.amount ?? 120)
+                : state.width,
+          height:
+            command.direction === 'taller' || command.direction === 'larger'
+              ? state.height + (command.amount ?? 120)
+              : command.direction === 'shorter' || command.direction === 'smaller'
+                ? state.height - (command.amount ?? 120)
+                : state.height,
+        }
+  const width = clampCanvasDimension(nextSize.width)
+  const height = clampCanvasDimension(nextSize.height)
+  const offset = getCanvasResizeOffset(
+    width - state.width,
+    height - state.height,
+    command.anchor,
+  )
+
+  if (width === state.width && height === state.height) {
+    return state
+  }
+
+  return {
+    ...state,
+    width,
+    height,
+    future: [],
+    history: [...state.history, takeSnapshot(state)],
+    shapes: state.shapes.map((shape) => ({
+      ...shape,
+      x: shape.x + offset.x,
+      y: shape.y + offset.y,
+    })),
+  }
 }
 
 export function applyDeleteCommand(

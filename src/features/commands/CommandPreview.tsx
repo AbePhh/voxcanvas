@@ -43,6 +43,14 @@ function formatCommand(command: ParsedCommand) {
       : 'Export format required'
   }
 
+  if (command.action === 'resizeCanvas') {
+    return command.mode === 'absolute'
+      ? `Resize canvas to ${command.width} x ${command.height} from ${
+          command.anchor ?? 'center'
+        }`
+      : `Resize canvas ${command.direction} from ${command.anchor ?? 'center'}`
+  }
+
   return command.action
 }
 
