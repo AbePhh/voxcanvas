@@ -9,6 +9,7 @@ import type {
   CommandPosition,
   CommandSize,
   CommandTarget,
+  ExportFormat,
   MoveShapeCommand,
   ParsedCommand,
 } from './types'
@@ -32,6 +33,10 @@ function findDictionaryMatch<T extends string>(
 }
 
 function detectSimpleAction(text: string) {
+  if (includesAny(text, ['导出', '保存图片', '下载图片', '保存作品', '下载作品'])) {
+    return 'export'
+  }
+
   if (includesAny(text, ['撤销', '取消上一步', '回退'])) {
     return 'undo'
   }
@@ -42,6 +47,24 @@ function detectSimpleAction(text: string) {
 
   if (includesAny(text, ['清空画布', '清除画布'])) {
     return 'clear'
+  }
+
+  return undefined
+}
+
+function detectExportFormat(text: string): ExportFormat | undefined {
+  const normalizedText = text.toLowerCase()
+
+  if (includesAny(normalizedText, ['svg']) || includesAny(text, ['SVG'])) {
+    return 'svg'
+  }
+
+  if (includesAny(normalizedText, ['jpg', 'jpeg']) || includesAny(text, ['JPG', 'JPEG'])) {
+    return 'jpg'
+  }
+
+  if (includesAny(normalizedText, ['png']) || includesAny(text, ['PNG'])) {
+    return 'png'
   }
 
   return undefined
@@ -274,6 +297,14 @@ export function parseCommand(rawText: string): ParsedCommand {
   const simpleAction = detectSimpleAction(text)
 
   if (simpleAction) {
+    if (simpleAction === 'export') {
+      return {
+        action: 'export',
+        format: detectExportFormat(text),
+        sourceText,
+      }
+    }
+
     return {
       action: simpleAction,
       sourceText,

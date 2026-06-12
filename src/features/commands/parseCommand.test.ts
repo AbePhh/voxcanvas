@@ -25,6 +25,28 @@ describe('parseCommand', () => {
     expect(parseCommand('清空画布')).toMatchObject({ action: 'clear' })
   })
 
+  it('parses image export commands locally', () => {
+    expect(parseCommand('导出图片')).toMatchObject({
+      action: 'export',
+      format: undefined,
+    })
+
+    expect(parseCommand('导出 JPG')).toMatchObject({
+      action: 'export',
+      format: 'jpg',
+    })
+
+    expect(parseCommand('导出 PNG')).toMatchObject({
+      action: 'export',
+      format: 'png',
+    })
+
+    expect(parseCommand('导出 SVG')).toMatchObject({
+      action: 'export',
+      format: 'svg',
+    })
+  })
+
   it('sends text creation commands to the planner', () => {
     expect(parseCommand('添加一段蓝色文字，内容是欢迎使用')).toMatchObject({
       action: 'unknown',

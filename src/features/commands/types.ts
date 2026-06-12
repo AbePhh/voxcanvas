@@ -9,6 +9,7 @@ export type CommandAction =
   | 'undo'
   | 'redo'
   | 'clear'
+  | 'export'
   | 'unknown'
 
 export type CommandColor =
@@ -34,6 +35,7 @@ export type CommandPosition =
   | 'bottom-right'
 
 export type CommandSize = 'small' | 'medium' | 'large'
+export type ExportFormat = 'png' | 'jpg' | 'svg'
 
 export type CreateShapeCommand = {
   action: 'create'
@@ -86,6 +88,11 @@ export type DeleteShapeCommand = {
 export type SimpleCanvasCommand =
   | {
       action: 'undo' | 'redo' | 'clear'
+      sourceText: string
+    }
+  | {
+      action: 'export'
+      format?: ExportFormat
       sourceText: string
     }
   | CreateShapeCommand
