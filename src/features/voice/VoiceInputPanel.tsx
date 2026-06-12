@@ -7,6 +7,11 @@ import {
 } from '../commands/clarification'
 import type { PendingClarification } from '../commands/clarification'
 import { CommandPreview } from '../commands/CommandPreview'
+import {
+  createPendingExportClarification,
+  resolveExportClarificationResponse,
+} from '../commands/exportClarification'
+import type { PendingExportClarification } from '../commands/exportClarification'
 import { parseCommand } from '../commands/parseCommand'
 import type { ParsedCommand } from '../commands/types'
 import type { CanvasState } from '../canvas/types'
@@ -47,6 +52,8 @@ export function VoiceInputPanel({
   > | null>(null)
   const [pendingClarification, setPendingClarification] =
     useState<PendingClarification | null>(null)
+  const [pendingExportClarification, setPendingExportClarification] =
+    useState<PendingExportClarification | null>(null)
   const { isPlanning, planCommand, plannerResult, resetPlanner } = useCommandPlanner()
 
   useEffect(() => {
@@ -62,6 +69,23 @@ export function VoiceInputPanel({
     }
 
     lastExecutedTranscriptRef.current = transcript
+
+    if (pendingExportClarification) {
+      const clarifiedExportCommand = resolveExportClarificationResponse(
+        transcript,
+        pendingExportClarification,
+      )
+
+      if (clarifiedExportCommand) {
+        queueMicrotask(() => {
+          setPendingExportClarification(null)
+          setClarificationFeedback(null)
+          setPendingClarification(null)
+        })
+        onCommandParsed?.(clarifiedExportCommand)
+        return
+      }
+    }
 
     if (pendingClarification) {
       const clarifiedCommand = resolveClarificationResponse(
@@ -100,6 +124,15 @@ export function VoiceInputPanel({
     const localCommand = parseCommand(transcript)
     const localTargetFeedback = createTargetFeedback(localCommand, canvasState)
 
+    if (localCommand.action === 'export' && !localCommand.format) {
+      queueMicrotask(() => {
+        setPendingExportClarification(createPendingExportClarification(localCommand))
+        setClarificationFeedback(null)
+        setPendingClarification(null)
+      })
+      return
+    }
+
     if (!shouldUseAiPlanner(transcript, localCommand.action)) {
       if (localTargetFeedback.status !== 'ok') {
         queueMicrotask(() => {
@@ -120,6 +153,7 @@ export function VoiceInputPanel({
       queueMicrotask(() => {
         setClarificationFeedback(null)
         setPendingClarification(null)
+        setPendingExportClarification(null)
       })
       onCommandParsed?.(localCommand)
       return
@@ -152,16 +186,25 @@ export function VoiceInputPanel({
         queueMicrotask(() => {
           setClarificationFeedback(null)
           setPendingClarification(null)
+          setPendingExportClarification(null)
         })
         onCommandParsed?.(result.command)
       }
     })
-  }, [canvasState, onCommandParsed, pendingClarification, planCommand, transcript])
+  }, [
+    canvasState,
+    onCommandParsed,
+    pendingClarification,
+    pendingExportClarification,
+    planCommand,
+    transcript,
+  ])
 
   const handleClear = () => {
     resetTranscript()
     setClarificationFeedback(null)
     setPendingClarification(null)
+    setPendingExportClarification(null)
   }
 
   return (
@@ -220,6 +263,17 @@ export function VoiceInputPanel({
               ))}
             </ul>
           ) : null}
+        </div>
+      ) : null}
+      {pendingExportClarification ? (
+        <div className="format-feedback" aria-live="polite">
+          <h3>Choose Export Format</h3>
+          <p>请说明要导出 PNG、JPG 还是 SVG。</p>
+          <ul>
+            <li>PNG：适合保留清晰线条和透明能力</li>
+            <li>JPG：适合普通图片分享，白色背景</li>
+            <li>SVG：适合继续编辑和保持矢量清晰度</li>
+          </ul>
         </div>
       ) : null}
       <PlannerPreview

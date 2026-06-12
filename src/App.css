@@ -72,6 +72,15 @@
   padding: 18px;
 }
 
+.export-status {
+  border: 1px solid #bbf7d0;
+  padding: 12px;
+  color: #166534;
+  background: #f0fdf4;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .inspector h2 {
   margin: 0 0 16px;
   color: #111827;

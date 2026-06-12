@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import './App.css'
 import {
   applyClearCommand,
@@ -13,12 +13,45 @@ import {
 import { DrawingCanvas } from './features/canvas/DrawingCanvas'
 import { sampleCanvas } from './features/canvas/sampleCanvas'
 import type { ParsedCommand } from './features/commands/types'
+import { exportSvgElement } from './features/export/exportCanvas'
 import { VoiceInputPanel } from './features/voice/VoiceInputPanel'
 
 function App() {
+  const canvasSvgRef = useRef<SVGSVGElement>(null)
   const [canvasState, setCanvasState] = useState(sampleCanvas)
+  const [exportMessage, setExportMessage] = useState('')
 
   const handleCommandParsed = useCallback((command: ParsedCommand) => {
+    if (command.action === 'export') {
+      const svgElement = canvasSvgRef.current
+
+      if (!command.format) {
+        setExportMessage('Please choose PNG, JPG, or SVG before exporting.')
+        return
+      }
+
+      const exportFormat = command.format
+
+      if (!svgElement) {
+        setExportMessage('Canvas is not ready to export.')
+        return
+      }
+
+      void exportSvgElement(svgElement, {
+        filename: 'voxcanvas',
+        format: exportFormat,
+      })
+        .then(() => {
+          setExportMessage(`Exported ${exportFormat.toUpperCase()} image.`)
+        })
+        .catch((error) => {
+          setExportMessage(
+            error instanceof Error ? error.message : 'Failed to export image.',
+          )
+        })
+      return
+    }
+
     setCanvasState((current) => {
       switch (command.action) {
         case 'create':
@@ -62,13 +95,19 @@ function App() {
 
       <section className="workspace" aria-label="Drawing workspace">
         <div className="canvas-stage">
-          <DrawingCanvas state={canvasState} />
+          <DrawingCanvas state={canvasState} svgRef={canvasSvgRef} />
         </div>
         <aside className="side-panel" aria-label="Workspace controls">
           <VoiceInputPanel
             canvasState={canvasState}
             onCommandParsed={handleCommandParsed}
           />
+
+          {exportMessage ? (
+            <section className="export-status" aria-live="polite">
+              {exportMessage}
+            </section>
+          ) : null}
 
           <section className="inspector" aria-label="Canvas object list">
             <h2>Scene Objects</h2>

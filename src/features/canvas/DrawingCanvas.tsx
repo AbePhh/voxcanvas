@@ -3,6 +3,7 @@ import './DrawingCanvas.css'
 
 type DrawingCanvasProps = {
   state: CanvasState
+  svgRef?: React.Ref<SVGSVGElement>
 }
 
 function getTrianglePoints(shape: ShapeObject) {
@@ -95,6 +96,10 @@ function renderShape(shape: ShapeObject, isSelected: boolean) {
           y={shape.y - 8}
           width={shape.width + 16}
           height={shape.height + 16}
+          fill="none"
+          stroke="#2563eb"
+          strokeDasharray="8 6"
+          strokeWidth="3"
           rx="6"
         />
       ) : null}
@@ -102,9 +107,10 @@ function renderShape(shape: ShapeObject, isSelected: boolean) {
   )
 }
 
-export function DrawingCanvas({ state }: DrawingCanvasProps) {
+export function DrawingCanvas({ state, svgRef }: DrawingCanvasProps) {
   return (
     <svg
+      ref={svgRef}
       className="drawing-canvas"
       viewBox={`0 0 ${state.width} ${state.height}`}
       role="img"

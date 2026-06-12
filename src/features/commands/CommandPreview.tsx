@@ -37,6 +37,12 @@ function formatCommand(command: ParsedCommand) {
     return `Delete ${command.target.mode} target`
   }
 
+  if (command.action === 'export') {
+    return command.format
+      ? `Export canvas as ${command.format.toUpperCase()}`
+      : 'Export format required'
+  }
+
   return command.action
 }
 

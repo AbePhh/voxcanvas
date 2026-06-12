@@ -142,6 +142,44 @@
   line-height: 1.35;
 }
 
+.format-feedback {
+  border: 1px solid #bfdbfe;
+  padding: 12px;
+  margin-top: 14px;
+  background: #eff6ff;
+}
+
+.format-feedback h3 {
+  margin: 0 0 8px;
+  color: #1e40af;
+  font-size: 14px;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.format-feedback p {
+  color: #1e3a8a;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.format-feedback ul {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.format-feedback li {
+  border: 1px solid #bfdbfe;
+  padding: 7px 8px;
+  background: #ffffff;
+  color: #1e3a8a;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 @media (max-width: 620px) {
   .voice-actions {
     grid-template-columns: 1fr;
