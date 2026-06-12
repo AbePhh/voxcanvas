@@ -204,6 +204,98 @@ describe('canvasOperations', () => {
     expect(moved.shapes[0].y).toBe(withCircle.shapes[0].y)
   })
 
+  it('moves the selected shape to an absolute position without filtering by that destination', () => {
+    const withCircle = applyCreateCommand(baseCanvas, {
+      action: 'create',
+      shape: 'circle',
+      color: 'green',
+      position: 'top-left',
+      size: 'medium',
+      sourceText: '画一个绿色圆形',
+    })
+
+    const moved = applyMoveCommand(withCircle, {
+      action: 'move',
+      target: { mode: 'selected' },
+      mode: 'absolute',
+      position: 'bottom-right',
+      sourceText: '把它移动到右下角',
+    })
+
+    expect(moved).not.toBe(withCircle)
+    expect(moved.shapes[0]).toMatchObject({
+      x: 712,
+      y: 381,
+    })
+  })
+
+  it('moves the uniquely matched shape by color and kind', () => {
+    const withGreenCircle = applyCreateCommand(baseCanvas, {
+      action: 'create',
+      shape: 'circle',
+      color: 'green',
+      position: 'top-left',
+      size: 'medium',
+      sourceText: '画一个绿色圆形',
+    })
+    const withBlueCircle = applyCreateCommand(withGreenCircle, {
+      action: 'create',
+      shape: 'circle',
+      color: 'blue',
+      position: 'center',
+      size: 'medium',
+      sourceText: '画一个蓝色圆形',
+    })
+
+    const moved = applyMoveCommand(withBlueCircle, {
+      action: 'move',
+      target: { mode: 'shape', shape: 'circle', color: 'green' },
+      mode: 'absolute',
+      position: 'top-right',
+      sourceText: '把绿色的圆圈移动到右上角',
+    })
+
+    expect(moved.shapes[0]).toMatchObject({
+      fill: '#22c55e',
+      x: 712,
+      y: 67,
+    })
+    expect(moved.shapes[1]).toMatchObject({
+      fill: '#3b82f6',
+      x: withBlueCircle.shapes[1].x,
+      y: withBlueCircle.shapes[1].y,
+    })
+  })
+
+  it('does not apply descriptive target commands when multiple shapes match', () => {
+    const withFirstCircle = applyCreateCommand(baseCanvas, {
+      action: 'create',
+      shape: 'circle',
+      color: 'green',
+      position: 'top-left',
+      size: 'medium',
+      sourceText: '画一个绿色圆形',
+    })
+    const withSecondCircle = applyCreateCommand(withFirstCircle, {
+      action: 'create',
+      shape: 'circle',
+      color: 'green',
+      position: 'center',
+      size: 'medium',
+      sourceText: '再画一个绿色圆形',
+    })
+
+    const moved = applyMoveCommand(withSecondCircle, {
+      action: 'move',
+      target: { mode: 'shape', shape: 'circle', color: 'green' },
+      mode: 'absolute',
+      position: 'top-right',
+      sourceText: '把绿色的圆圈移动到右上角',
+    })
+
+    expect(moved).toBe(withSecondCircle)
+  })
+
   it('resizes text font size with the text object', () => {
     const withText = applyCreateCommand(baseCanvas, {
       action: 'create',
@@ -222,5 +314,28 @@ describe('canvasOperations', () => {
     })
 
     expect(resized.shapes[0].fontSize).toBeGreaterThan(withText.shapes[0].fontSize ?? 0)
+  })
+
+  it('does not fallback from selected target to the latest shape', () => {
+    const withCircle = applyCreateCommand(baseCanvas, {
+      action: 'create',
+      shape: 'circle',
+      color: 'red',
+      position: 'center',
+      size: 'medium',
+      sourceText: '画一个红色圆形',
+    })
+    const withoutSelection = {
+      ...withCircle,
+      selectedId: undefined,
+    }
+
+    const deleted = applyDeleteCommand(withoutSelection, {
+      action: 'delete',
+      target: { mode: 'selected' },
+      sourceText: '删除它',
+    })
+
+    expect(deleted).toBe(withoutSelection)
   })
 })

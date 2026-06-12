@@ -49,6 +49,7 @@ export type CommandTarget = {
   mode: 'selected' | 'last' | 'shape' | 'position' | 'any'
   shape?: ShapeKind
   position?: CommandPosition
+  color?: CommandColor
 }
 
 export type MoveShapeCommand = {

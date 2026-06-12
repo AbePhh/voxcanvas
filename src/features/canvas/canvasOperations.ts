@@ -1,5 +1,4 @@
 import type {
-  CommandColor,
   CommandPosition,
   CommandTarget,
   CreateShapeCommand,
@@ -8,24 +7,8 @@ import type {
   RecolorShapeCommand,
   ResizeShapeCommand,
 } from '../commands/types'
+import { colorStyles, matchesCommandColor } from './colorStyles'
 import type { CanvasSnapshot, CanvasState, ShapeObject } from './types'
-
-type ShapeStyle = {
-  fill: string
-  stroke: string
-}
-
-const colorStyles: Record<CommandColor, ShapeStyle> = {
-  red: { fill: '#ef4444', stroke: '#991b1b' },
-  orange: { fill: '#f97316', stroke: '#9a3412' },
-  yellow: { fill: '#facc15', stroke: '#a16207' },
-  green: { fill: '#22c55e', stroke: '#166534' },
-  blue: { fill: '#3b82f6', stroke: '#1e40af' },
-  purple: { fill: '#a855f7', stroke: '#6b21a8' },
-  black: { fill: '#111827', stroke: '#020617' },
-  white: { fill: '#ffffff', stroke: '#94a3b8' },
-  gray: { fill: '#9ca3af', stroke: '#4b5563' },
-}
 
 const sizeScale = {
   small: 0.72,
@@ -103,6 +86,10 @@ function findTargetShape(state: CanvasState, target: CommandTarget) {
       return false
     }
 
+    if (target.color && !matchesCommandColor(shape.fill, target.color)) {
+      return false
+    }
+
     if (target.position) {
       const desiredAnchor = positionAnchors[target.position]
       const shapeCenterX = shape.x + shape.width / 2
@@ -121,6 +108,8 @@ function findTargetShape(state: CanvasState, target: CommandTarget) {
     return true
   }
 
+  const reversedMatches = [...state.shapes].reverse().filter(matchesTargetFilters)
+
   if (target.mode === 'selected' && state.selectedId) {
     const selectedShape = state.shapes.find((shape) => shape.id === state.selectedId)
 
@@ -129,17 +118,19 @@ function findTargetShape(state: CanvasState, target: CommandTarget) {
     }
   }
 
-  const reversedShapes = [...state.shapes].reverse()
-
-  if (target.mode === 'last' || target.mode === 'selected') {
-    return reversedShapes.find(matchesTargetFilters)
+  if (target.mode === 'selected') {
+    return undefined
   }
 
-  if (target.mode === 'shape' || target.mode === 'position') {
-    return reversedShapes.find(matchesTargetFilters)
+  if (target.mode === 'last') {
+    return reversedMatches[0]
   }
 
-  return reversedShapes[0]
+  if (target.mode === 'shape' || target.mode === 'position' || target.mode === 'any') {
+    return reversedMatches.length === 1 ? reversedMatches[0] : undefined
+  }
+
+  return undefined
 }
 
 function updateTargetShape(
