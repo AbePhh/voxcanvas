@@ -32,6 +32,7 @@ export type CreateShapeCommand = {
   color?: CommandColor
   position?: CommandPosition
   size: CommandSize
+  text?: string
   sourceText: string
 }
 

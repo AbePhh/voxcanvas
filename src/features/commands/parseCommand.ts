@@ -29,6 +29,24 @@ function findDictionaryMatch<T extends string>(
   )?.[0]
 }
 
+function extractTextContent(sourceText: string) {
+  const quotedText = sourceText.match(/[“"']([^”"']+)[”"']/)?.[1]
+
+  if (quotedText) {
+    return quotedText.trim()
+  }
+
+  const contentMatch = sourceText.match(
+    /(?:内容是|内容为|写着|写上|文字是|文字为|文本是|文本为)(.+)$/,
+  )?.[1]
+
+  if (contentMatch) {
+    return contentMatch.trim().replace(/[。！？,.!?]$/, '')
+  }
+
+  return undefined
+}
+
 function detectAction(text: string) {
   if (includesAny(text, ['撤销', '取消上一步', '回退'])) {
     return 'undo'
@@ -91,6 +109,7 @@ export function parseCommand(rawText: string): ParsedCommand {
   const color = findDictionaryMatch<CommandColor>(text, colorKeywords)
   const position = findDictionaryMatch<CommandPosition>(text, positionKeywords)
   const size = findDictionaryMatch<CommandSize>(text, sizeKeywords) ?? 'medium'
+  const textContent = shape === 'text' ? extractTextContent(sourceText) : undefined
 
   return {
     action: 'create',
@@ -98,6 +117,7 @@ export function parseCommand(rawText: string): ParsedCommand {
     color,
     position,
     size,
+    text: textContent,
     sourceText,
   }
 }
