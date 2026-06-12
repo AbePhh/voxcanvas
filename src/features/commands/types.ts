@@ -1,6 +1,15 @@
 import type { ShapeKind } from '../canvas/types'
 
-export type CommandAction = 'create' | 'undo' | 'redo' | 'clear' | 'unknown'
+export type CommandAction =
+  | 'create'
+  | 'move'
+  | 'recolor'
+  | 'resize'
+  | 'delete'
+  | 'undo'
+  | 'redo'
+  | 'clear'
+  | 'unknown'
 
 export type CommandColor =
   | 'red'
@@ -36,12 +45,52 @@ export type CreateShapeCommand = {
   sourceText: string
 }
 
+export type CommandTarget = {
+  mode: 'selected' | 'last' | 'shape' | 'position' | 'any'
+  shape?: ShapeKind
+  position?: CommandPosition
+}
+
+export type MoveShapeCommand = {
+  action: 'move'
+  target: CommandTarget
+  mode: 'absolute' | 'relative'
+  position?: CommandPosition
+  direction?: 'left' | 'right' | 'up' | 'down'
+  distance?: number
+  sourceText: string
+}
+
+export type RecolorShapeCommand = {
+  action: 'recolor'
+  target: CommandTarget
+  color: CommandColor
+  sourceText: string
+}
+
+export type ResizeShapeCommand = {
+  action: 'resize'
+  target: CommandTarget
+  direction: 'larger' | 'smaller'
+  sourceText: string
+}
+
+export type DeleteShapeCommand = {
+  action: 'delete'
+  target: CommandTarget
+  sourceText: string
+}
+
 export type SimpleCanvasCommand =
   | {
       action: 'undo' | 'redo' | 'clear'
       sourceText: string
     }
   | CreateShapeCommand
+  | MoveShapeCommand
+  | RecolorShapeCommand
+  | ResizeShapeCommand
+  | DeleteShapeCommand
 
 export type UnknownCommand = {
   action: 'unknown'

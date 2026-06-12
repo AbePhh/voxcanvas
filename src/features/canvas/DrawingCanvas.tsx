@@ -60,11 +60,13 @@ function renderShape(shape: ShapeObject, isSelected: boolean) {
       case 'text':
         return (
           <text
-            x={shape.x}
-            y={shape.y}
+            x={shape.x + shape.width / 2}
+            y={shape.y + shape.height / 2}
             fill={shape.fill}
-            fontSize="24"
+            fontSize={shape.fontSize ?? 24}
             fontWeight="700"
+            dominantBaseline="middle"
+            textAnchor="middle"
           >
             {shape.text}
           </text>

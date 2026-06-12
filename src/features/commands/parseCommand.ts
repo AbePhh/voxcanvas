@@ -8,6 +8,8 @@ import type {
   CommandColor,
   CommandPosition,
   CommandSize,
+  CommandTarget,
+  MoveShapeCommand,
   ParsedCommand,
 } from './types'
 import type { ShapeKind } from '../canvas/types'
@@ -60,11 +62,89 @@ function detectAction(text: string) {
     return 'clear'
   }
 
+  if (includesAny(text, ['删除', '删掉', '移除', '去掉'])) {
+    return 'delete'
+  }
+
+  if (includesAny(text, ['移动', '移到', '放到', '挪到'])) {
+    return 'move'
+  }
+
+  if (includesAny(text, ['改成', '变成', '换成']) && findDictionaryMatch(text, colorKeywords)) {
+    return 'recolor'
+  }
+
+  if (includesAny(text, ['放大', '变大', '扩大', '缩小', '变小'])) {
+    return 'resize'
+  }
+
   if (includesAny(text, ['画', '绘制', '创建', '添加', '生成'])) {
     return 'create'
   }
 
   return 'unknown'
+}
+
+function detectMoveDirection(text: string): MoveShapeCommand['direction'] {
+  if (includesAny(text, ['往左', '向左', '左移', '左挪'])) {
+    return 'left'
+  }
+
+  if (includesAny(text, ['往右', '向右', '右移', '右挪'])) {
+    return 'right'
+  }
+
+  if (includesAny(text, ['往上', '向上', '上移', '上挪'])) {
+    return 'up'
+  }
+
+  if (includesAny(text, ['往下', '向下', '下移', '下挪'])) {
+    return 'down'
+  }
+
+  return undefined
+}
+
+function detectTarget(text: string, options: { includePosition?: boolean } = {}): CommandTarget {
+  const shape = findDictionaryMatch<ShapeKind>(text, shapeKeywords)
+  const position = options.includePosition
+    ? findDictionaryMatch<CommandPosition>(text, positionKeywords)
+    : undefined
+
+  if (includesAny(text, ['刚才', '刚刚', '上一个', '最近'])) {
+    return {
+      mode: 'last',
+      shape,
+      position,
+    }
+  }
+
+  if (includesAny(text, ['选中', '当前', '这个', '它'])) {
+    return {
+      mode: 'selected',
+      shape,
+      position,
+    }
+  }
+
+  if (shape) {
+    return {
+      mode: 'shape',
+      shape,
+      position,
+    }
+  }
+
+  if (position) {
+    return {
+      mode: 'position',
+      position,
+    }
+  }
+
+  return {
+    mode: 'selected',
+  }
 }
 
 export function parseCommand(rawText: string): ParsedCommand {
@@ -84,6 +164,75 @@ export function parseCommand(rawText: string): ParsedCommand {
   if (action === 'undo' || action === 'redo' || action === 'clear') {
     return {
       action,
+      sourceText,
+    }
+  }
+
+  if (action === 'delete') {
+    return {
+      action,
+      target: detectTarget(text, { includePosition: true }),
+      sourceText,
+    }
+  }
+
+  if (action === 'move') {
+    const direction = detectMoveDirection(text)
+
+    if (direction) {
+      return {
+        action,
+        target: detectTarget(text),
+        mode: 'relative',
+        direction,
+        distance: 48,
+        sourceText,
+      }
+    }
+
+    const position = findDictionaryMatch<CommandPosition>(text, positionKeywords)
+
+    if (!position) {
+      return {
+        action: 'unknown',
+        reason: 'missing-position',
+        sourceText,
+      }
+    }
+
+    return {
+      action,
+      target: detectTarget(text),
+      mode: 'absolute',
+      position,
+      sourceText,
+    }
+  }
+
+  if (action === 'recolor') {
+    const color = findDictionaryMatch<CommandColor>(text, colorKeywords)
+
+    if (!color) {
+      return {
+        action: 'unknown',
+        reason: 'missing-color',
+        sourceText,
+      }
+    }
+
+    return {
+      action,
+      target: detectTarget(text),
+      color,
+      sourceText,
+    }
+  }
+
+  if (action === 'resize') {
+    return {
+      action,
+      target: detectTarget(text),
+      direction: includesAny(text, ['缩小', '变小']) ? 'smaller' : 'larger',
       sourceText,
     }
   }

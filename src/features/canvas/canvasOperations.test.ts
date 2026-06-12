@@ -2,6 +2,10 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   applyClearCommand,
   applyCreateCommand,
+  applyDeleteCommand,
+  applyMoveCommand,
+  applyRecolorCommand,
+  applyResizeCommand,
   applyRedoCommand,
   applyUndoCommand,
   createShapeFromCommand,
@@ -87,6 +91,7 @@ describe('canvasOperations', () => {
       type: 'text',
       text: '你好 VoxCanvas',
       fill: '#111827',
+      fontSize: 24,
     })
   })
 
@@ -121,5 +126,101 @@ describe('canvasOperations', () => {
     expect(applyUndoCommand(baseCanvas)).toBe(baseCanvas)
     expect(applyRedoCommand(baseCanvas)).toBe(baseCanvas)
     expect(applyClearCommand(baseCanvas)).toBe(baseCanvas)
+  })
+
+  it('moves, recolors, resizes, and deletes target shapes', () => {
+    const withCircle = applyCreateCommand(baseCanvas, {
+      action: 'create',
+      shape: 'circle',
+      color: 'red',
+      position: 'center',
+      size: 'medium',
+      sourceText: '画一个红色圆形',
+    })
+    const moved = applyMoveCommand(withCircle, {
+      action: 'move',
+      target: { mode: 'selected' },
+      mode: 'absolute',
+      position: 'top-right',
+      sourceText: '把它移到右上角',
+    })
+
+    expect(moved.shapes[0]).toMatchObject({
+      x: 712,
+      y: 67,
+    })
+
+    const recolored = applyRecolorCommand(moved, {
+      action: 'recolor',
+      target: { mode: 'selected' },
+      color: 'blue',
+      sourceText: '把它改成蓝色',
+    })
+
+    expect(recolored.shapes[0]).toMatchObject({
+      fill: '#3b82f6',
+      stroke: '#1e40af',
+    })
+
+    const resized = applyResizeCommand(recolored, {
+      action: 'resize',
+      target: { mode: 'selected' },
+      direction: 'larger',
+      sourceText: '把它放大',
+    })
+
+    expect(resized.shapes[0].width).toBeGreaterThan(recolored.shapes[0].width)
+    expect(resized.history).toHaveLength(4)
+
+    const deleted = applyDeleteCommand(resized, {
+      action: 'delete',
+      target: { mode: 'selected' },
+      sourceText: '删除它',
+    })
+
+    expect(deleted.shapes).toHaveLength(0)
+    expect(applyUndoCommand(deleted).shapes).toHaveLength(1)
+  })
+
+  it('moves a target shape by a relative offset', () => {
+    const withCircle = applyCreateCommand(baseCanvas, {
+      action: 'create',
+      shape: 'circle',
+      color: 'red',
+      position: 'center',
+      size: 'medium',
+      sourceText: '画一个红色圆形',
+    })
+    const moved = applyMoveCommand(withCircle, {
+      action: 'move',
+      target: { mode: 'selected' },
+      mode: 'relative',
+      direction: 'right',
+      distance: 48,
+      sourceText: '把它往右移动一点',
+    })
+
+    expect(moved.shapes[0].x).toBe(withCircle.shapes[0].x + 48)
+    expect(moved.shapes[0].y).toBe(withCircle.shapes[0].y)
+  })
+
+  it('resizes text font size with the text object', () => {
+    const withText = applyCreateCommand(baseCanvas, {
+      action: 'create',
+      shape: 'text',
+      color: 'black',
+      position: 'center',
+      size: 'medium',
+      text: 'Hello',
+      sourceText: '添加文字内容是Hello',
+    })
+    const resized = applyResizeCommand(withText, {
+      action: 'resize',
+      target: { mode: 'selected' },
+      direction: 'larger',
+      sourceText: '把它放大',
+    })
+
+    expect(resized.shapes[0].fontSize).toBeGreaterThan(withText.shapes[0].fontSize ?? 0)
   })
 })

@@ -12,6 +12,7 @@ export type ShapeObject = {
   stroke: string
   strokeWidth?: number
   text?: string
+  fontSize?: number
 }
 
 export type CanvasSnapshot = {
