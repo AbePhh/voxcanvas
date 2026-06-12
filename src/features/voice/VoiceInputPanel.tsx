@@ -3,13 +3,19 @@ import { useVoiceInput } from './useVoiceInput'
 import { CommandPreview } from '../commands/CommandPreview'
 import { parseCommand } from '../commands/parseCommand'
 import type { ParsedCommand } from '../commands/types'
+import type { CanvasState } from '../canvas/types'
+import { PlannerPreview } from '../planner/PlannerPreview'
 import './VoiceInputPanel.css'
 
 type VoiceInputPanelProps = {
+  canvasState: CanvasState
   onCommandParsed?: (command: ParsedCommand) => void
 }
 
-export function VoiceInputPanel({ onCommandParsed }: VoiceInputPanelProps) {
+export function VoiceInputPanel({
+  canvasState,
+  onCommandParsed,
+}: VoiceInputPanelProps) {
   const {
     errorMessage,
     interimTranscript,
@@ -85,6 +91,11 @@ export function VoiceInputPanel({ onCommandParsed }: VoiceInputPanelProps) {
       </div>
 
       <CommandPreview command={parsedCommand} />
+      <PlannerPreview
+        canvasState={canvasState}
+        enabled={parsedCommand?.action === 'unknown'}
+        sourceText={previewText}
+      />
 
       {supportStatus === 'unsupported' ? (
         <p className="voice-message">

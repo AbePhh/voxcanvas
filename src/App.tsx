@@ -65,7 +65,10 @@ function App() {
           <DrawingCanvas state={canvasState} />
         </div>
         <aside className="side-panel" aria-label="Workspace controls">
-          <VoiceInputPanel onCommandParsed={handleCommandParsed} />
+          <VoiceInputPanel
+            canvasState={canvasState}
+            onCommandParsed={handleCommandParsed}
+          />
 
           <section className="inspector" aria-label="Canvas object list">
             <h2>Scene Objects</h2>
