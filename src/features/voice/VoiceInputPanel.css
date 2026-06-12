@@ -1,0 +1,110 @@
+.voice-panel {
+  border: 1px solid #d7dde8;
+  background: #ffffff;
+  padding: 18px;
+}
+
+.voice-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.voice-panel h2 {
+  margin: 0 0 4px;
+  color: #111827;
+  font-size: 18px;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.voice-panel p {
+  margin: 0;
+}
+
+.voice-panel__header p {
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.voice-status {
+  border: 1px solid #d7dde8;
+  padding: 5px 8px;
+  color: #6b7280;
+  background: #f9fafb;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.voice-status.is-active {
+  border-color: #16a34a;
+  color: #166534;
+  background: #dcfce7;
+}
+
+.voice-actions {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.voice-actions button {
+  min-height: 38px;
+  border: 1px solid #cbd5e1;
+  padding: 0 12px;
+  color: #111827;
+  background: #ffffff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.voice-actions button:hover:not(:disabled) {
+  border-color: #2563eb;
+}
+
+.voice-actions button:disabled {
+  color: #9ca3af;
+  cursor: not-allowed;
+}
+
+.voice-actions .primary-action {
+  border-color: #2563eb;
+  color: #ffffff;
+  background: #2563eb;
+}
+
+.transcript-box {
+  min-height: 112px;
+  border: 1px solid #e5e7eb;
+  padding: 12px;
+  background: #f8fafc;
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.transcript-box .interim {
+  margin-top: 8px;
+  color: #6b7280;
+}
+
+.transcript-box .placeholder,
+.voice-message {
+  color: #6b7280;
+}
+
+.voice-message {
+  margin-top: 10px;
+  font-size: 13px;
+}
+
+@media (max-width: 620px) {
+  .voice-actions {
+    grid-template-columns: 1fr;
+  }
+}
