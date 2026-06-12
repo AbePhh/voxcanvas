@@ -4,7 +4,9 @@ import { CommandPreview } from '../commands/CommandPreview'
 import { parseCommand } from '../commands/parseCommand'
 import type { ParsedCommand } from '../commands/types'
 import type { CanvasState } from '../canvas/types'
+import { shouldUseAiPlanner } from '../planner/aiPlanner'
 import { PlannerPreview } from '../planner/PlannerPreview'
+import { useCommandPlanner } from '../planner/useCommandPlanner'
 import './VoiceInputPanel.css'
 
 type VoiceInputPanelProps = {
@@ -34,12 +36,14 @@ export function VoiceInputPanel({
     [previewText],
   )
   const lastExecutedTranscriptRef = useRef('')
+  const { isPlanning, planCommand, plannerResult, resetPlanner } = useCommandPlanner()
 
   useEffect(() => {
     if (isListening) {
       lastExecutedTranscriptRef.current = ''
+      resetPlanner()
     }
-  }, [isListening])
+  }, [isListening, resetPlanner])
 
   useEffect(() => {
     if (!transcript || transcript === lastExecutedTranscriptRef.current) {
@@ -47,8 +51,23 @@ export function VoiceInputPanel({
     }
 
     lastExecutedTranscriptRef.current = transcript
-    onCommandParsed?.(parseCommand(transcript))
-  }, [onCommandParsed, transcript])
+    const localCommand = parseCommand(transcript)
+
+    if (!shouldUseAiPlanner(transcript, localCommand.action)) {
+      onCommandParsed?.(localCommand)
+      return
+    }
+
+    void planCommand(transcript, canvasState).then((result) => {
+      if (!result) {
+        return
+      }
+
+      if (result.status === 'planned') {
+        onCommandParsed?.(result.command)
+      }
+    })
+  }, [canvasState, onCommandParsed, planCommand, transcript])
 
   return (
     <section className="voice-panel" aria-label="Voice input">
@@ -93,7 +112,13 @@ export function VoiceInputPanel({
       <CommandPreview command={parsedCommand} />
       <PlannerPreview
         canvasState={canvasState}
-        enabled={parsedCommand?.action === 'unknown'}
+        enabled={
+          isPlanning ||
+          plannerResult !== null ||
+          parsedCommand?.action === 'unknown'
+        }
+        isPlanning={isPlanning}
+        result={plannerResult}
         sourceText={previewText}
       />
 

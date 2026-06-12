@@ -70,7 +70,10 @@ function detectAction(text: string) {
     return 'move'
   }
 
-  if (includesAny(text, ['改成', '变成', '换成']) && findDictionaryMatch(text, colorKeywords)) {
+  if (
+    includesAny(text, ['改成', '变成', '换成']) &&
+    findDictionaryMatch(text, colorKeywords)
+  ) {
     return 'recolor'
   }
 

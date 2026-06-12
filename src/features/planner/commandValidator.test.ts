@@ -27,6 +27,28 @@ describe('validatePlannedCommand', () => {
     })
   })
 
+  it('defaults create command size to medium when planner omits it', () => {
+    expect(
+      validatePlannedCommand({
+        action: 'create',
+        shape: 'text',
+        color: 'blue',
+        position: 'top-right',
+        text: '我是张红兵',
+      }),
+    ).toMatchObject({
+      status: 'planned',
+      command: {
+        action: 'create',
+        shape: 'text',
+        color: 'blue',
+        position: 'top-right',
+        size: 'medium',
+        text: '我是张红兵',
+      },
+    })
+  })
+
   it('rejects unsupported actions and shapes', () => {
     expect(
       validatePlannedCommand({
@@ -72,13 +94,16 @@ describe('validatePlannedCommand', () => {
     expect(
       validatePlannedCommand({
         action: 'recolor',
-        target: { mode: 'shape', shape: 'circle' },
+        target: 'selected',
         color: 'green',
       }),
     ).toMatchObject({
       status: 'planned',
       command: {
         action: 'recolor',
+        target: {
+          mode: 'selected',
+        },
         color: 'green',
       },
     })
