@@ -47,6 +47,60 @@ describe('parseCommand', () => {
     })
   })
 
+  it('parses canvas resize commands only when canvas is explicit', () => {
+    expect(parseCommand('把画布设置为1200x800')).toMatchObject({
+      action: 'resizeCanvas',
+      mode: 'absolute',
+      width: 1200,
+      height: 800,
+      anchor: 'center',
+    })
+
+    expect(parseCommand('把画布变大一点')).toMatchObject({
+      action: 'resizeCanvas',
+      mode: 'relative',
+      direction: 'larger',
+    })
+
+    expect(parseCommand('把画布变宽')).toMatchObject({
+      action: 'resizeCanvas',
+      mode: 'relative',
+      direction: 'wider',
+      anchor: 'center',
+    })
+
+    expect(parseCommand('画布左边加宽一点')).toMatchObject({
+      action: 'resizeCanvas',
+      mode: 'relative',
+      direction: 'wider',
+      anchor: 'left',
+    })
+
+    expect(parseCommand('画布下面加高一点')).toMatchObject({
+      action: 'resizeCanvas',
+      mode: 'relative',
+      direction: 'taller',
+      anchor: 'bottom',
+    })
+
+    expect(parseCommand('话不变宽')).toMatchObject({
+      action: 'resizeCanvas',
+      mode: 'relative',
+      direction: 'wider',
+      anchor: 'center',
+    })
+
+    expect(parseCommand('画板变高')).toMatchObject({
+      action: 'resizeCanvas',
+      mode: 'relative',
+      direction: 'taller',
+    })
+
+    expect(parseCommand('把它放大')).toMatchObject({
+      action: 'resize',
+    })
+  })
+
   it('sends text creation commands to the planner', () => {
     expect(parseCommand('添加一段蓝色文字，内容是欢迎使用')).toMatchObject({
       action: 'unknown',

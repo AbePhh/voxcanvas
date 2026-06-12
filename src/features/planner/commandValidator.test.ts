@@ -133,6 +133,54 @@ describe('validatePlannedCommand', () => {
     })
   })
 
+  it('accepts valid canvas resize commands', () => {
+    expect(
+      validatePlannedCommand({
+        action: 'resizeCanvas',
+        mode: 'absolute',
+        width: 1280,
+        height: 720,
+      }),
+    ).toMatchObject({
+      status: 'planned',
+      command: {
+        action: 'resizeCanvas',
+        mode: 'absolute',
+        width: 1280,
+        height: 720,
+      },
+    })
+
+    expect(
+      validatePlannedCommand({
+        action: 'resizeCanvas',
+        mode: 'relative',
+        direction: 'wider',
+        anchor: 'left',
+      }),
+    ).toMatchObject({
+      status: 'planned',
+      command: {
+        action: 'resizeCanvas',
+        mode: 'relative',
+        direction: 'wider',
+        anchor: 'left',
+      },
+    })
+
+    expect(
+      validatePlannedCommand({
+        action: 'resizeCanvas',
+        mode: 'relative',
+        direction: 'wider',
+        anchor: 'outside',
+      }),
+    ).toMatchObject({
+      status: 'invalid',
+      reason: 'invalid-resize-canvas-anchor',
+    })
+  })
+
   it('requires canvas context for dangerous edit commands', () => {
     expect(
       validatePlannedCommand({

@@ -9,6 +9,8 @@ import type {
   CommandPosition,
   CommandSize,
   CommandTarget,
+  CanvasResizeAnchor,
+  CanvasResizeDirection,
   ExportFormat,
   MoveShapeCommand,
   ParsedCommand,
@@ -91,6 +93,120 @@ function detectEditAction(text: string) {
   }
 
   return undefined
+}
+
+function detectCanvasResizeDirection(text: string): CanvasResizeDirection {
+  if (includesAny(text, ['变宽', '加宽', '更宽', '宽一点'])) {
+    return 'wider'
+  }
+
+  if (includesAny(text, ['变窄', '缩窄', '窄一点'])) {
+    return 'narrower'
+  }
+
+  if (includesAny(text, ['变高', '加高', '更高', '高一点'])) {
+    return 'taller'
+  }
+
+  if (includesAny(text, ['变矮', '矮一点', '降低高度'])) {
+    return 'shorter'
+  }
+
+  if (includesAny(text, ['缩小', '变小', '小一点'])) {
+    return 'smaller'
+  }
+
+  return 'larger'
+}
+
+function detectCanvasResizeAnchor(text: string): CanvasResizeAnchor {
+  const hasTop = includesAny(text, ['上面', '上方', '顶部', '上边'])
+  const hasBottom = includesAny(text, ['下面', '下方', '底部', '下边'])
+  const hasLeft = includesAny(text, ['左边', '左侧', '左面'])
+  const hasRight = includesAny(text, ['右边', '右侧', '右面'])
+
+  if (hasTop && hasLeft) {
+    return 'top-left'
+  }
+
+  if (hasTop && hasRight) {
+    return 'top-right'
+  }
+
+  if (hasBottom && hasLeft) {
+    return 'bottom-left'
+  }
+
+  if (hasBottom && hasRight) {
+    return 'bottom-right'
+  }
+
+  if (hasLeft) {
+    return 'left'
+  }
+
+  if (hasRight) {
+    return 'right'
+  }
+
+  if (hasTop) {
+    return 'top'
+  }
+
+  if (hasBottom) {
+    return 'bottom'
+  }
+
+  return 'center'
+}
+
+function parseCanvasSize(text: string) {
+  const normalizedText = text.replace(/[×＊*]/g, 'x')
+  const explicitSizeMatch = normalizedText.match(/(\d{2,4})\s*(?:x|乘|比|,|，|\s)\s*(\d{2,4})/)
+
+  if (!explicitSizeMatch) {
+    return null
+  }
+
+  return {
+    width: Number(explicitSizeMatch[1]),
+    height: Number(explicitSizeMatch[2]),
+  }
+}
+
+function parseCanvasResizeCommand(text: string, sourceText: string): ParsedCommand | null {
+  const hasCanvasKeyword = includesAny(text, ['画布', '画板', '话不', '画不', '画部'])
+
+  if (!hasCanvasKeyword) {
+    return null
+  }
+
+  if (!includesAny(text, ['调整', '设置', '设为', '改成', '变大', '放大', '缩小', '变小', '变宽', '变窄', '变高', '变矮', '加宽', '加高'])) {
+    return null
+  }
+
+  const size = parseCanvasSize(text)
+  const anchor = detectCanvasResizeAnchor(text)
+
+  if (size) {
+    return {
+      action: 'resizeCanvas',
+      mode: 'absolute',
+      width: size.width,
+      height: size.height,
+      anchor,
+      sourceText,
+    }
+  }
+
+  return {
+    action: 'resizeCanvas',
+    mode: 'relative',
+    direction: detectCanvasResizeDirection(text),
+    anchor,
+    amount: 120,
+    sourceText,
+  }
 }
 
 function detectCreateAction(text: string) {
@@ -309,6 +425,12 @@ export function parseCommand(rawText: string): ParsedCommand {
       action: simpleAction,
       sourceText,
     }
+  }
+
+  const canvasResizeCommand = parseCanvasResizeCommand(text, sourceText)
+
+  if (canvasResizeCommand) {
+    return canvasResizeCommand
   }
 
   const editAction = detectEditAction(text)

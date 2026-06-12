@@ -10,6 +10,7 @@ export type CommandAction =
   | 'redo'
   | 'clear'
   | 'export'
+  | 'resizeCanvas'
   | 'unknown'
 
 export type CommandColor =
@@ -36,6 +37,25 @@ export type CommandPosition =
 
 export type CommandSize = 'small' | 'medium' | 'large'
 export type ExportFormat = 'png' | 'jpg' | 'svg'
+
+export type CanvasResizeDirection =
+  | 'larger'
+  | 'smaller'
+  | 'wider'
+  | 'narrower'
+  | 'taller'
+  | 'shorter'
+
+export type CanvasResizeAnchor =
+  | 'center'
+  | 'left'
+  | 'right'
+  | 'top'
+  | 'bottom'
+  | 'top-left'
+  | 'top-right'
+  | 'bottom-left'
+  | 'bottom-right'
 
 export type CreateShapeCommand = {
   action: 'create'
@@ -85,6 +105,24 @@ export type DeleteShapeCommand = {
   sourceText: string
 }
 
+export type ResizeCanvasCommand =
+  | {
+      action: 'resizeCanvas'
+      mode: 'absolute'
+      width: number
+      height: number
+      anchor?: CanvasResizeAnchor
+      sourceText: string
+    }
+  | {
+      action: 'resizeCanvas'
+      mode: 'relative'
+      direction: CanvasResizeDirection
+      anchor?: CanvasResizeAnchor
+      amount?: number
+      sourceText: string
+    }
+
 export type SimpleCanvasCommand =
   | {
       action: 'undo' | 'redo' | 'clear'
@@ -95,6 +133,7 @@ export type SimpleCanvasCommand =
       format?: ExportFormat
       sourceText: string
     }
+  | ResizeCanvasCommand
   | CreateShapeCommand
   | MoveShapeCommand
   | RecolorShapeCommand

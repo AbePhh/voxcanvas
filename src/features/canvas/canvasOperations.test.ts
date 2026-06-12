@@ -5,6 +5,7 @@ import {
   applyDeleteCommand,
   applyMoveCommand,
   applyRecolorCommand,
+  applyResizeCanvasCommand,
   applyResizeCommand,
   applyRedoCommand,
   applyUndoCommand,
@@ -314,6 +315,121 @@ describe('canvasOperations', () => {
     })
 
     expect(resized.shapes[0].fontSize).toBeGreaterThan(withText.shapes[0].fontSize ?? 0)
+  })
+
+  it('adds canvas space on the right without moving existing shapes', () => {
+    const withCircle = applyCreateCommand(baseCanvas, {
+      action: 'create',
+      shape: 'circle',
+      color: 'yellow',
+      position: 'top-right',
+      size: 'medium',
+      sourceText: '画一个黄色圆形',
+    })
+    const originalShape = withCircle.shapes[0]
+    const resized = applyResizeCanvasCommand(withCircle, {
+      action: 'resizeCanvas',
+      mode: 'absolute',
+      width: 1280,
+      height: withCircle.height,
+      anchor: 'right',
+      sourceText: '把画布设置为1280x720',
+    })
+
+    expect(resized.width).toBe(1280)
+    expect(resized.height).toBe(withCircle.height)
+    expect(resized.shapes[0]).toEqual(originalShape)
+    expect(resized.history).toHaveLength(withCircle.history.length + 1)
+
+    const undone = applyUndoCommand(resized)
+
+    expect(undone.width).toBe(withCircle.width)
+    expect(undone.height).toBe(withCircle.height)
+    expect(undone.shapes[0]).toEqual(originalShape)
+  })
+
+  it('resizes the canvas relatively within bounds', () => {
+    const resized = applyResizeCanvasCommand(baseCanvas, {
+      action: 'resizeCanvas',
+      mode: 'relative',
+      direction: 'wider',
+      anchor: 'right',
+      amount: 120,
+      sourceText: '把画布变宽',
+    })
+
+    expect(resized.width).toBe(baseCanvas.width + 120)
+    expect(resized.height).toBe(baseCanvas.height)
+  })
+
+  it('adds canvas space from the left by shifting shapes right', () => {
+    const withCircle = applyCreateCommand(baseCanvas, {
+      action: 'create',
+      shape: 'circle',
+      color: 'yellow',
+      position: 'center',
+      size: 'medium',
+      sourceText: '画一个黄色圆形',
+    })
+    const resized = applyResizeCanvasCommand(withCircle, {
+      action: 'resizeCanvas',
+      mode: 'relative',
+      direction: 'wider',
+      anchor: 'left',
+      amount: 120,
+      sourceText: '画布左边加宽一点',
+    })
+
+    expect(resized.width).toBe(withCircle.width + 120)
+    expect(resized.shapes[0].x).toBe(withCircle.shapes[0].x + 120)
+    expect(resized.shapes[0].y).toBe(withCircle.shapes[0].y)
+  })
+
+  it('adds canvas space from the top by shifting shapes down', () => {
+    const withCircle = applyCreateCommand(baseCanvas, {
+      action: 'create',
+      shape: 'circle',
+      color: 'yellow',
+      position: 'center',
+      size: 'medium',
+      sourceText: '画一个黄色圆形',
+    })
+    const resized = applyResizeCanvasCommand(withCircle, {
+      action: 'resizeCanvas',
+      mode: 'relative',
+      direction: 'taller',
+      anchor: 'top',
+      amount: 120,
+      sourceText: '画布上面加高一点',
+    })
+
+    expect(resized.height).toBe(withCircle.height + 120)
+    expect(resized.shapes[0].x).toBe(withCircle.shapes[0].x)
+    expect(resized.shapes[0].y).toBe(withCircle.shapes[0].y + 120)
+  })
+
+  it('expands the canvas from the center by default', () => {
+    const withCircle = applyCreateCommand(baseCanvas, {
+      action: 'create',
+      shape: 'circle',
+      color: 'yellow',
+      position: 'center',
+      size: 'medium',
+      sourceText: '画一个黄色圆形',
+    })
+    const resized = applyResizeCanvasCommand(withCircle, {
+      action: 'resizeCanvas',
+      mode: 'relative',
+      direction: 'larger',
+      anchor: 'center',
+      amount: 120,
+      sourceText: '画布变大一点',
+    })
+
+    expect(resized.width).toBe(withCircle.width + 120)
+    expect(resized.height).toBe(withCircle.height + 120)
+    expect(resized.shapes[0].x).toBe(withCircle.shapes[0].x + 60)
+    expect(resized.shapes[0].y).toBe(withCircle.shapes[0].y + 60)
   })
 
   it('does not fallback from selected target to the latest shape', () => {

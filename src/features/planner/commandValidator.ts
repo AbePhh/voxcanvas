@@ -1,5 +1,7 @@
 import type { ShapeKind } from '../canvas/types'
 import type {
+  CanvasResizeAnchor,
+  CanvasResizeDirection,
   CommandColor,
   CommandPosition,
   CommandSize,
@@ -19,6 +21,7 @@ const allowedActions = new Set([
   'redo',
   'clear',
   'unknown',
+  'resizeCanvas',
 ])
 const allowedShapes = new Set<ShapeKind>(['circle', 'rect', 'triangle', 'line', 'text'])
 const allowedColors = new Set<CommandColor>([
@@ -48,12 +51,49 @@ const allowedTargetModes = new Set(['selected', 'last', 'shape', 'position', 'an
 const allowedMoveModes = new Set(['absolute', 'relative'])
 const allowedMoveDirections = new Set(['left', 'right', 'up', 'down'])
 const allowedResizeDirections = new Set(['larger', 'smaller'])
+const allowedCanvasResizeDirections = new Set<CanvasResizeDirection>([
+  'larger',
+  'smaller',
+  'wider',
+  'narrower',
+  'taller',
+  'shorter',
+])
+const allowedCanvasResizeAnchors = new Set<CanvasResizeAnchor>([
+  'center',
+  'left',
+  'right',
+  'top',
+  'bottom',
+  'top-left',
+  'top-right',
+  'bottom-left',
+  'bottom-right',
+])
 type ValidatorOptions = {
   canvas?: CommandPlannerInput['canvas']
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
+}
+
+function isCanvasResizeDirection(value: unknown): value is CanvasResizeDirection {
+  return (
+    typeof value === 'string' &&
+    allowedCanvasResizeDirections.has(value as CanvasResizeDirection)
+  )
+}
+
+function normalizeCanvasResizeAnchor(value: unknown): CanvasResizeAnchor | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+
+  return typeof value === 'string' &&
+    allowedCanvasResizeAnchors.has(value as CanvasResizeAnchor)
+    ? (value as CanvasResizeAnchor)
+    : undefined
 }
 
 function normalizeTarget(value: unknown): CommandTarget | null {
@@ -190,6 +230,65 @@ export function validatePlannedCommand(
       source: 'ai',
       command: {
         action: rawValue.action,
+        sourceText,
+      },
+    }
+  }
+
+  if (rawValue.action === 'resizeCanvas') {
+    const anchor = normalizeCanvasResizeAnchor(rawValue.anchor)
+
+    if (rawValue.anchor !== undefined && !anchor) {
+      return {
+        status: 'invalid',
+        reason: 'invalid-resize-canvas-anchor',
+        rawValue,
+      }
+    }
+
+    if (rawValue.mode === 'absolute') {
+      if (typeof rawValue.width !== 'number' || typeof rawValue.height !== 'number') {
+        return {
+          status: 'invalid',
+          reason: 'invalid-resize-canvas-size',
+          rawValue,
+        }
+      }
+
+      return {
+        status: 'planned',
+        source: 'ai',
+        command: {
+          action: 'resizeCanvas',
+          mode: 'absolute',
+          width: rawValue.width,
+          height: rawValue.height,
+          anchor,
+          sourceText,
+        },
+      }
+    }
+
+    if (
+      rawValue.mode !== 'relative' ||
+      !isCanvasResizeDirection(rawValue.direction)
+    ) {
+      return {
+        status: 'invalid',
+        reason: 'invalid-resize-canvas-command',
+        rawValue,
+      }
+    }
+
+    return {
+      status: 'planned',
+      source: 'ai',
+      command: {
+        action: 'resizeCanvas',
+        mode: 'relative',
+        direction: rawValue.direction,
+        anchor,
+        amount: typeof rawValue.amount === 'number' ? rawValue.amount : undefined,
         sourceText,
       },
     }

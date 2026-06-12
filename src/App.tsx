@@ -6,6 +6,7 @@ import {
   applyDeleteCommand,
   applyMoveCommand,
   applyRecolorCommand,
+  applyResizeCanvasCommand,
   applyResizeCommand,
   applyRedoCommand,
   applyUndoCommand,
@@ -64,6 +65,8 @@ function App() {
           return applyRecolorCommand(current, command)
         case 'resize':
           return applyResizeCommand(current, command)
+        case 'resizeCanvas':
+          return applyResizeCanvasCommand(current, command)
         case 'clear':
           return applyClearCommand(current)
         case 'undo':
@@ -89,7 +92,9 @@ function App() {
           <span>{canvasState.shapes.length} objects</span>
           <span>{canvasState.history.length} undo</span>
           <span>{canvasState.future.length} redo</span>
-          <span>SVG canvas</span>
+          <span>
+            {canvasState.width} x {canvasState.height}
+          </span>
         </div>
       </header>
 
