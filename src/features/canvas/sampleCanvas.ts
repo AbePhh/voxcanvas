@@ -4,6 +4,8 @@ export const sampleCanvas: CanvasState = {
   width: 960,
   height: 560,
   selectedId: 'sun',
+  history: [],
+  future: [],
   shapes: [
     {
       id: 'sky-label',

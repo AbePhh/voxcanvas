@@ -1,11 +1,19 @@
 import { describe, expect, it, vi } from 'vitest'
-import { applyCreateCommand, createShapeFromCommand } from './canvasOperations'
+import {
+  applyClearCommand,
+  applyCreateCommand,
+  applyRedoCommand,
+  applyUndoCommand,
+  createShapeFromCommand,
+} from './canvasOperations'
 import type { CanvasState } from './types'
 
 const baseCanvas: CanvasState = {
   width: 960,
   height: 560,
   shapes: [],
+  history: [],
+  future: [],
 }
 
 describe('canvasOperations', () => {
@@ -57,6 +65,8 @@ describe('canvasOperations', () => {
       width: 201,
       height: 141,
     })
+    expect(nextState.history).toHaveLength(1)
+    expect(nextState.future).toHaveLength(0)
   })
 
   it('uses command text content for text shapes', () => {
@@ -78,5 +88,38 @@ describe('canvasOperations', () => {
       text: '你好 VoxCanvas',
       fill: '#111827',
     })
+  })
+
+  it('clears the canvas and supports undo and redo', () => {
+    const withShape = applyCreateCommand(baseCanvas, {
+      action: 'create',
+      shape: 'circle',
+      color: 'green',
+      position: 'center',
+      size: 'medium',
+      sourceText: '画一个绿色圆形',
+    })
+    const cleared = applyClearCommand(withShape)
+
+    expect(cleared.shapes).toHaveLength(0)
+    expect(cleared.history).toHaveLength(2)
+    expect(cleared.future).toHaveLength(0)
+
+    const undone = applyUndoCommand(cleared)
+
+    expect(undone.shapes).toHaveLength(1)
+    expect(undone.future).toHaveLength(1)
+
+    const redone = applyRedoCommand(undone)
+
+    expect(redone.shapes).toHaveLength(0)
+    expect(redone.history).toHaveLength(2)
+    expect(redone.future).toHaveLength(0)
+  })
+
+  it('returns the same state when undo, redo, or clear cannot be applied', () => {
+    expect(applyUndoCommand(baseCanvas)).toBe(baseCanvas)
+    expect(applyRedoCommand(baseCanvas)).toBe(baseCanvas)
+    expect(applyClearCommand(baseCanvas)).toBe(baseCanvas)
   })
 })

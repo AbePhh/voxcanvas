@@ -1,5 +1,5 @@
 import type { CreateShapeCommand } from '../commands/types'
-import type { CanvasState, ShapeObject } from './types'
+import type { CanvasSnapshot, CanvasState, ShapeObject } from './types'
 
 type ShapeStyle = {
   fill: string
@@ -46,6 +46,21 @@ const positionAnchors = {
 
 function createShapeId(shape: string) {
   return `${shape}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
+}
+
+function takeSnapshot(state: CanvasState): CanvasSnapshot {
+  return {
+    shapes: state.shapes,
+    selectedId: state.selectedId,
+  }
+}
+
+function restoreSnapshot(state: CanvasState, snapshot: CanvasSnapshot): CanvasState {
+  return {
+    ...state,
+    shapes: snapshot.shapes,
+    selectedId: snapshot.selectedId,
+  }
 }
 
 function getShapeSize(command: CreateShapeCommand) {
@@ -103,7 +118,54 @@ export function applyCreateCommand(
 
   return {
     ...state,
+    future: [],
+    history: [...state.history, takeSnapshot(state)],
     selectedId: shape.id,
     shapes: [...state.shapes, shape],
+  }
+}
+
+export function applyClearCommand(state: CanvasState): CanvasState {
+  if (state.shapes.length === 0) {
+    return state
+  }
+
+  return {
+    ...state,
+    future: [],
+    history: [...state.history, takeSnapshot(state)],
+    selectedId: undefined,
+    shapes: [],
+  }
+}
+
+export function applyUndoCommand(state: CanvasState): CanvasState {
+  const previousSnapshot = state.history.at(-1)
+
+  if (!previousSnapshot) {
+    return state
+  }
+
+  const nextHistory = state.history.slice(0, -1)
+  const currentSnapshot = takeSnapshot(state)
+
+  return {
+    ...restoreSnapshot(state, previousSnapshot),
+    future: [currentSnapshot, ...state.future],
+    history: nextHistory,
+  }
+}
+
+export function applyRedoCommand(state: CanvasState): CanvasState {
+  const nextSnapshot = state.future[0]
+
+  if (!nextSnapshot) {
+    return state
+  }
+
+  return {
+    ...restoreSnapshot(state, nextSnapshot),
+    future: state.future.slice(1),
+    history: [...state.history, takeSnapshot(state)],
   }
 }

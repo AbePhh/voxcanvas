@@ -14,9 +14,16 @@ export type ShapeObject = {
   text?: string
 }
 
+export type CanvasSnapshot = {
+  shapes: ShapeObject[]
+  selectedId?: string
+}
+
 export type CanvasState = {
   width: number
   height: number
   shapes: ShapeObject[]
   selectedId?: string
+  history: CanvasSnapshot[]
+  future: CanvasSnapshot[]
 }
