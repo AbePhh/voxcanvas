@@ -1,6 +1,11 @@
 import { useCallback, useState } from 'react'
 import './App.css'
-import { applyCreateCommand } from './features/canvas/canvasOperations'
+import {
+  applyClearCommand,
+  applyCreateCommand,
+  applyRedoCommand,
+  applyUndoCommand,
+} from './features/canvas/canvasOperations'
 import { DrawingCanvas } from './features/canvas/DrawingCanvas'
 import { sampleCanvas } from './features/canvas/sampleCanvas'
 import type { ParsedCommand } from './features/commands/types'
@@ -10,11 +15,22 @@ function App() {
   const [canvasState, setCanvasState] = useState(sampleCanvas)
 
   const handleCommandParsed = useCallback((command: ParsedCommand) => {
-    if (command.action !== 'create') {
-      return
-    }
-
-    setCanvasState((current) => applyCreateCommand(current, command))
+    setCanvasState((current) => {
+      switch (command.action) {
+        case 'create':
+          return applyCreateCommand(current, command)
+        case 'clear':
+          return applyClearCommand(current)
+        case 'undo':
+          return applyUndoCommand(current)
+        case 'redo':
+          return applyRedoCommand(current)
+        case 'unknown':
+          return current
+        default:
+          return current
+      }
+    })
   }, [])
 
   return (
@@ -26,6 +42,8 @@ function App() {
         </div>
         <div className="status-panel" aria-label="Canvas summary">
           <span>{canvasState.shapes.length} objects</span>
+          <span>{canvasState.history.length} undo</span>
+          <span>{canvasState.future.length} redo</span>
           <span>SVG canvas</span>
         </div>
       </header>
