@@ -1,0 +1,16 @@
+.drawing-canvas {
+  display: block;
+  width: 100%;
+  max-height: min(62vh, 620px);
+  aspect-ratio: 12 / 7;
+  border: 1px solid #d7dde8;
+  background: #f8fafc;
+}
+
+.selection-box {
+  fill: none;
+  stroke: #2563eb;
+  stroke-width: 2;
+  stroke-dasharray: 8 6;
+  pointer-events: none;
+}
