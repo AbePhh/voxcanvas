@@ -20,6 +20,7 @@ export function useVoiceInput(language = 'zh-CN') {
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null)
   const listeningRef = useRef(false)
   const lastInterimUpdateRef = useRef(0)
+  const sessionTranscriptRef = useRef('')
   const initialSupportStatus =
     typeof window === 'undefined' || !getSpeechRecognition() ? 'unsupported' : 'supported'
 
@@ -103,12 +104,16 @@ export function useVoiceInput(language = 'zh-CN') {
         return
       }
 
+      if (normalizedFinal) {
+        sessionTranscriptRef.current = normalizeTranscript(
+          `${sessionTranscriptRef.current} ${normalizedFinal}`,
+        )
+      }
+
       lastInterimUpdateRef.current = now
       setState((current) => ({
         ...current,
-        transcript: normalizedFinal
-          ? normalizeTranscript(`${current.transcript} ${normalizedFinal}`)
-          : current.transcript,
+        transcript: sessionTranscriptRef.current,
         interimTranscript: normalizedInterim,
       }))
     }
@@ -123,6 +128,7 @@ export function useVoiceInput(language = 'zh-CN') {
   }, [language])
 
   const resetTranscript = useCallback(() => {
+    sessionTranscriptRef.current = ''
     setState((current) => ({
       ...current,
       transcript: '',
@@ -154,6 +160,14 @@ export function useVoiceInput(language = 'zh-CN') {
     if (listeningRef.current) {
       return
     }
+
+    sessionTranscriptRef.current = ''
+    setState((current) => ({
+      ...current,
+      transcript: '',
+      interimTranscript: '',
+      errorMessage: '',
+    }))
 
     recognitionRef.current.start()
   }, [])

@@ -1,8 +1,15 @@
+import { useEffect, useMemo, useRef } from 'react'
 import { useVoiceInput } from './useVoiceInput'
 import { CommandPreview } from '../commands/CommandPreview'
+import { parseCommand } from '../commands/parseCommand'
+import type { ParsedCommand } from '../commands/types'
 import './VoiceInputPanel.css'
 
-export function VoiceInputPanel() {
+type VoiceInputPanelProps = {
+  onCommandParsed?: (command: ParsedCommand) => void
+}
+
+export function VoiceInputPanel({ onCommandParsed }: VoiceInputPanelProps) {
   const {
     errorMessage,
     interimTranscript,
@@ -15,6 +22,27 @@ export function VoiceInputPanel() {
   } = useVoiceInput()
 
   const hasTranscript = transcript || interimTranscript
+  const previewText = transcript || interimTranscript
+  const parsedCommand = useMemo(
+    () => (previewText ? parseCommand(previewText) : null),
+    [previewText],
+  )
+  const lastExecutedTranscriptRef = useRef('')
+
+  useEffect(() => {
+    if (isListening) {
+      lastExecutedTranscriptRef.current = ''
+    }
+  }, [isListening])
+
+  useEffect(() => {
+    if (!transcript || transcript === lastExecutedTranscriptRef.current) {
+      return
+    }
+
+    lastExecutedTranscriptRef.current = transcript
+    onCommandParsed?.(parseCommand(transcript))
+  }, [onCommandParsed, transcript])
 
   return (
     <section className="voice-panel" aria-label="Voice input">
@@ -56,7 +84,7 @@ export function VoiceInputPanel() {
         )}
       </div>
 
-      <CommandPreview text={transcript || interimTranscript} />
+      <CommandPreview command={parsedCommand} />
 
       {supportStatus === 'unsupported' ? (
         <p className="voice-message">

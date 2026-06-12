@@ -1,9 +1,8 @@
-import { parseCommand } from './parseCommand'
 import type { ParsedCommand } from './types'
 import './CommandPreview.css'
 
 type CommandPreviewProps = {
-  text: string
+  command: ParsedCommand | null
 }
 
 function formatCommand(command: ParsedCommand) {
@@ -23,9 +22,7 @@ function formatCommand(command: ParsedCommand) {
   return command.action
 }
 
-export function CommandPreview({ text }: CommandPreviewProps) {
-  const command = text ? parseCommand(text) : null
-
+export function CommandPreview({ command }: CommandPreviewProps) {
   return (
     <div className="command-preview" aria-live="polite">
       <h3>Parsed Command</h3>

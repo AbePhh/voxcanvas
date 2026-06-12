@@ -27,6 +27,21 @@ describe('parseCommand', () => {
     expect(parseCommand('清空画布')).toMatchObject({ action: 'clear' })
   })
 
+  it('parses text content for text creation commands', () => {
+    expect(parseCommand('添加一段蓝色文字，内容是欢迎使用')).toMatchObject({
+      action: 'create',
+      shape: 'text',
+      color: 'blue',
+      text: '欢迎使用',
+    })
+
+    expect(parseCommand('创建文本写着“VoxCanvas”')).toMatchObject({
+      action: 'create',
+      shape: 'text',
+      text: 'VoxCanvas',
+    })
+  })
+
   it('returns an unknown command for unsupported text', () => {
     expect(parseCommand('今天天气怎么样')).toMatchObject({
       action: 'unknown',
