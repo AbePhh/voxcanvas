@@ -4,6 +4,24 @@ import { createPlannerInput } from './types'
 import type { CanvasState } from '../canvas/types'
 
 describe('validatePlannedCommand', () => {
+  const canvasWithOneCircle = {
+    width: 960,
+    height: 560,
+    selectedId: 'circle-1',
+    objects: [
+      {
+        id: 'circle-1',
+        type: 'circle' as const,
+        x: 100,
+        y: 120,
+        width: 80,
+        height: 80,
+        fill: '#3b82f6',
+        text: undefined,
+      },
+    ],
+  }
+
   it('accepts a valid create command from planner output', () => {
     expect(
       validatePlannedCommand({
@@ -74,13 +92,16 @@ describe('validatePlannedCommand', () => {
 
   it('accepts valid edit commands', () => {
     expect(
-      validatePlannedCommand({
-        action: 'move',
-        target: { mode: 'selected' },
-        mode: 'relative',
-        direction: 'right',
-        distance: 80,
-      }),
+      validatePlannedCommand(
+        {
+          action: 'move',
+          target: { mode: 'selected' },
+          mode: 'relative',
+          direction: 'right',
+          distance: 80,
+        },
+        { canvas: canvasWithOneCircle },
+      ),
     ).toMatchObject({
       status: 'planned',
       command: {
@@ -92,11 +113,14 @@ describe('validatePlannedCommand', () => {
     })
 
     expect(
-      validatePlannedCommand({
-        action: 'recolor',
-        target: 'selected',
-        color: 'green',
-      }),
+      validatePlannedCommand(
+        {
+          action: 'recolor',
+          target: 'selected',
+          color: 'green',
+        },
+        { canvas: canvasWithOneCircle },
+      ),
     ).toMatchObject({
       status: 'planned',
       command: {
@@ -106,6 +130,147 @@ describe('validatePlannedCommand', () => {
         },
         color: 'green',
       },
+    })
+  })
+
+  it('requires canvas context for dangerous edit commands', () => {
+    expect(
+      validatePlannedCommand({
+        action: 'delete',
+        target: { mode: 'selected' },
+      }),
+    ).toMatchObject({
+      status: 'invalid',
+      reason: 'missing-canvas-context',
+    })
+  })
+
+  it('rejects dangerous edit commands when the target is missing or ambiguous', () => {
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'delete',
+          target: { mode: 'selected' },
+        },
+        {
+          canvas: {
+            ...canvasWithOneCircle,
+            selectedId: undefined,
+          },
+        },
+      ),
+    ).toMatchObject({
+      status: 'invalid',
+      reason: 'target-not-found',
+    })
+
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'delete',
+          target: { mode: 'shape', shape: 'circle' },
+        },
+        {
+          canvas: {
+            ...canvasWithOneCircle,
+            objects: [
+              ...canvasWithOneCircle.objects,
+              {
+                id: 'circle-2',
+                type: 'circle',
+                x: 300,
+                y: 120,
+                width: 80,
+                height: 80,
+                fill: '#ef4444',
+                text: undefined,
+              },
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({
+      status: 'invalid',
+      reason: 'ambiguous-target',
+    })
+  })
+
+  it('accepts descriptive targets only when color and kind identify one object', () => {
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'move',
+          target: { mode: 'shape', shape: 'circle', color: 'green' },
+          mode: 'absolute',
+          position: 'top-right',
+        },
+        {
+          canvas: {
+            ...canvasWithOneCircle,
+            objects: [
+              {
+                ...canvasWithOneCircle.objects[0],
+                fill: '#22c55e',
+              },
+              {
+                id: 'circle-2',
+                type: 'circle',
+                x: 300,
+                y: 120,
+                width: 80,
+                height: 80,
+                fill: '#3b82f6',
+                text: undefined,
+              },
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({
+      status: 'planned',
+      command: {
+        action: 'move',
+        target: {
+          mode: 'shape',
+          shape: 'circle',
+          color: 'green',
+        },
+      },
+    })
+
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'move',
+          target: { mode: 'shape', shape: 'circle', color: 'green' },
+          mode: 'absolute',
+          position: 'top-right',
+        },
+        {
+          canvas: {
+            ...canvasWithOneCircle,
+            objects: [
+              {
+                ...canvasWithOneCircle.objects[0],
+                fill: '#22c55e',
+              },
+              {
+                id: 'circle-2',
+                type: 'circle',
+                x: 300,
+                y: 120,
+                width: 80,
+                height: 80,
+                fill: '#22c55e',
+                text: undefined,
+              },
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({
+      status: 'invalid',
+      reason: 'ambiguous-target',
     })
   })
 })

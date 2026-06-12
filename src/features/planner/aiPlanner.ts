@@ -27,7 +27,7 @@ export const aiPlanner: CommandPlanner = async (input): Promise<CommandPlannerRe
       }
     }
 
-    return validatePlannedCommand(body.rawCommand)
+    return validatePlannedCommand(body.rawCommand, { canvas: input.canvas })
   } catch (error) {
     return {
       status: 'invalid',

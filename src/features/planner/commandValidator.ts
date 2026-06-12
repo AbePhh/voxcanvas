@@ -5,7 +5,8 @@ import type {
   CommandSize,
   CommandTarget,
 } from '../commands/types'
-import type { CommandPlannerResult } from './types'
+import { matchesCommandColor } from '../canvas/colorStyles'
+import type { CommandPlannerInput, CommandPlannerResult } from './types'
 
 const allowedActions = new Set([
   'create',
@@ -46,6 +47,21 @@ const allowedTargetModes = new Set(['selected', 'last', 'shape', 'position', 'an
 const allowedMoveModes = new Set(['absolute', 'relative'])
 const allowedMoveDirections = new Set(['left', 'right', 'up', 'down'])
 const allowedResizeDirections = new Set(['larger', 'smaller'])
+const positionAnchors: Record<CommandPosition, { x: number; y: number }> = {
+  'top-left': { x: 0.2, y: 0.22 },
+  top: { x: 0.5, y: 0.2 },
+  'top-right': { x: 0.8, y: 0.22 },
+  left: { x: 0.2, y: 0.52 },
+  center: { x: 0.5, y: 0.52 },
+  right: { x: 0.8, y: 0.52 },
+  'bottom-left': { x: 0.2, y: 0.78 },
+  bottom: { x: 0.5, y: 0.8 },
+  'bottom-right': { x: 0.8, y: 0.78 },
+}
+
+type ValidatorOptions = {
+  canvas?: CommandPlannerInput['canvas']
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
@@ -77,14 +93,107 @@ function normalizeTarget(value: unknown): CommandTarget | null {
     return null
   }
 
+  if (value.color !== undefined && !allowedColors.has(value.color as CommandColor)) {
+    return null
+  }
+
   return {
     mode: value.mode as CommandTarget['mode'],
     shape: value.shape as ShapeKind | undefined,
     position: value.position as CommandPosition | undefined,
+    color: value.color as CommandColor | undefined,
   }
 }
 
-export function validatePlannedCommand(rawValue: unknown): CommandPlannerResult {
+function matchesTargetPosition(
+  object: CommandPlannerInput['canvas']['objects'][number],
+  canvas: CommandPlannerInput['canvas'],
+  position: CommandPosition,
+) {
+  const desiredAnchor = positionAnchors[position]
+  const objectCenterX = object.x + object.width / 2
+  const objectCenterY = object.y + object.height / 2
+  const desiredX = canvas.width * desiredAnchor.x
+  const desiredY = canvas.height * desiredAnchor.y
+  const xTolerance = canvas.width * 0.22
+  const yTolerance = canvas.height * 0.22
+
+  return (
+    Math.abs(objectCenterX - desiredX) <= xTolerance &&
+    Math.abs(objectCenterY - desiredY) <= yTolerance
+  )
+}
+
+function countTargetMatches(
+  target: CommandTarget,
+  canvas: CommandPlannerInput['canvas'],
+) {
+  const matchesFilters = (object: CommandPlannerInput['canvas']['objects'][number]) => {
+    if (target.shape && object.type !== target.shape) {
+      return false
+    }
+
+    if (target.color && !matchesCommandColor(object.fill, target.color)) {
+      return false
+    }
+
+    if (target.position && !matchesTargetPosition(object, canvas, target.position)) {
+      return false
+    }
+
+    return true
+  }
+
+  if (target.mode === 'selected') {
+    return canvas.selectedId &&
+      canvas.objects.some(
+        (object) => object.id === canvas.selectedId && matchesFilters(object),
+      )
+      ? 1
+      : 0
+  }
+
+  if (target.mode === 'last') {
+    return canvas.objects.length > 0 ? 1 : 0
+  }
+
+  if (target.mode === 'shape' || target.mode === 'position' || target.mode === 'any') {
+    return canvas.objects.filter(matchesFilters).length
+  }
+
+  return 0
+}
+
+function validateSingleTarget(
+  target: CommandTarget,
+  rawValue: unknown,
+  options: ValidatorOptions,
+) {
+  if (!options.canvas) {
+    return {
+      status: 'invalid',
+      reason: 'missing-canvas-context',
+      rawValue,
+    } satisfies CommandPlannerResult
+  }
+
+  const matchCount = countTargetMatches(target, options.canvas)
+
+  if (matchCount !== 1) {
+    return {
+      status: 'invalid',
+      reason: matchCount === 0 ? 'target-not-found' : 'ambiguous-target',
+      rawValue,
+    } satisfies CommandPlannerResult
+  }
+
+  return null
+}
+
+export function validatePlannedCommand(
+  rawValue: unknown,
+  options: ValidatorOptions = {},
+): CommandPlannerResult {
   if (!isRecord(rawValue) || typeof rawValue.action !== 'string') {
     return {
       status: 'invalid',
@@ -179,6 +288,12 @@ export function validatePlannedCommand(rawValue: unknown): CommandPlannerResult 
       }
     }
 
+    const targetError = validateSingleTarget(target, rawValue, options)
+
+    if (targetError) {
+      return targetError
+    }
+
     if (!allowedMoveModes.has(rawValue.mode as string)) {
       return {
         status: 'invalid',
@@ -242,6 +357,12 @@ export function validatePlannedCommand(rawValue: unknown): CommandPlannerResult 
       }
     }
 
+    const targetError = validateSingleTarget(target, rawValue, options)
+
+    if (targetError) {
+      return targetError
+    }
+
     return {
       status: 'planned',
       source: 'ai',
@@ -268,6 +389,12 @@ export function validatePlannedCommand(rawValue: unknown): CommandPlannerResult 
       }
     }
 
+    const targetError = validateSingleTarget(target, rawValue, options)
+
+    if (targetError) {
+      return targetError
+    }
+
     return {
       status: 'planned',
       source: 'ai',
@@ -289,6 +416,12 @@ export function validatePlannedCommand(rawValue: unknown): CommandPlannerResult 
         reason: 'invalid-delete-target',
         rawValue,
       }
+    }
+
+    const targetError = validateSingleTarget(target, rawValue, options)
+
+    if (targetError) {
+      return targetError
     }
 
     return {

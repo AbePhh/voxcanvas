@@ -15,7 +15,7 @@ import type {
 import type { ShapeKind } from '../canvas/types'
 
 function normalizeCommandText(text: string) {
-  return text.replace(/\s+/g, '').replace(/[，。！？,.!?]/g, '').trim()
+  return text.replace(/\s+/g, '').replace(/[，。！？、,.!?]/g, '').trim()
 }
 
 function includesAny(text: string, keywords: string[]) {
@@ -31,25 +31,7 @@ function findDictionaryMatch<T extends string>(
   )?.[0]
 }
 
-function extractTextContent(sourceText: string) {
-  const quotedText = sourceText.match(/[“"']([^”"']+)[”"']/)?.[1]
-
-  if (quotedText) {
-    return quotedText.trim()
-  }
-
-  const contentMatch = sourceText.match(
-    /(?:内容是|内容为|写着|写上|文字是|文字为|文本是|文本为)(.+)$/,
-  )?.[1]
-
-  if (contentMatch) {
-    return contentMatch.trim().replace(/[。！？,.!?]$/, '')
-  }
-
-  return undefined
-}
-
-function detectAction(text: string) {
+function detectSimpleAction(text: string) {
   if (includesAny(text, ['撤销', '取消上一步', '回退'])) {
     return 'undo'
   }
@@ -58,15 +40,19 @@ function detectAction(text: string) {
     return 'redo'
   }
 
-  if (includesAny(text, ['清空', '清除画布', '清空画布', '全部删除'])) {
+  if (includesAny(text, ['清空画布', '清除画布'])) {
     return 'clear'
   }
 
+  return undefined
+}
+
+function detectEditAction(text: string) {
   if (includesAny(text, ['删除', '删掉', '移除', '去掉'])) {
     return 'delete'
   }
 
-  if (includesAny(text, ['移动', '移到', '放到', '挪到'])) {
+  if (includesAny(text, ['移动', '移到', '移动到', '放到', '挪到'])) {
     return 'move'
   }
 
@@ -81,11 +67,15 @@ function detectAction(text: string) {
     return 'resize'
   }
 
+  return undefined
+}
+
+function detectCreateAction(text: string) {
   if (includesAny(text, ['画', '绘制', '创建', '添加', '生成'])) {
     return 'create'
   }
 
-  return 'unknown'
+  return undefined
 }
 
 function detectMoveDirection(text: string): MoveShapeCommand['direction'] {
@@ -108,8 +98,35 @@ function detectMoveDirection(text: string): MoveShapeCommand['direction'] {
   return undefined
 }
 
-function detectTarget(text: string, options: { includePosition?: boolean } = {}): CommandTarget {
+function createUnknown(reason: string, sourceText: string): ParsedCommand {
+  return {
+    action: 'unknown',
+    reason,
+    sourceText,
+  }
+}
+
+function splitRecolorText(text: string) {
+  const operator = ['改成', '变成', '换成'].find((keyword) => text.includes(keyword))
+
+  if (!operator) {
+    return null
+  }
+
+  const [targetText, colorText] = text.split(operator, 2)
+
+  return {
+    targetText,
+    colorText,
+  }
+}
+
+function detectExplicitTarget(
+  text: string,
+  options: { includePosition?: boolean } = {},
+): CommandTarget | null {
   const shape = findDictionaryMatch<ShapeKind>(text, shapeKeywords)
+  const color = findDictionaryMatch<CommandColor>(text, colorKeywords)
   const position = options.includePosition
     ? findDictionaryMatch<CommandPosition>(text, positionKeywords)
     : undefined
@@ -118,63 +135,50 @@ function detectTarget(text: string, options: { includePosition?: boolean } = {})
     return {
       mode: 'last',
       shape,
+      color,
       position,
     }
   }
 
-  if (includesAny(text, ['选中', '当前', '这个', '它'])) {
+  if (includesAny(text, ['选中', '当前', '这个', '那个', '它'])) {
     return {
       mode: 'selected',
       shape,
+      color,
       position,
     }
   }
 
-  if (shape) {
+  if (shape || color || position) {
     return {
-      mode: 'shape',
+      mode: shape ? 'shape' : position ? 'position' : 'any',
       shape,
+      color,
       position,
     }
   }
 
-  if (position) {
-    return {
-      mode: 'position',
-      position,
-    }
-  }
-
-  return {
-    mode: 'selected',
-  }
+  return null
 }
 
-export function parseCommand(rawText: string): ParsedCommand {
-  const sourceText = rawText.trim()
-  const text = normalizeCommandText(sourceText)
+function parseEditCommand(
+  action: NonNullable<ReturnType<typeof detectEditAction>>,
+  text: string,
+  sourceText: string,
+): ParsedCommand {
+  const recolorParts = action === 'recolor' ? splitRecolorText(text) : null
+  const target = detectExplicitTarget(recolorParts?.targetText ?? text, {
+    includePosition: action !== 'move',
+  })
 
-  if (!text) {
-    return {
-      action: 'unknown',
-      reason: 'empty-input',
-      sourceText,
-    }
-  }
-
-  const action = detectAction(text)
-
-  if (action === 'undo' || action === 'redo' || action === 'clear') {
-    return {
-      action,
-      sourceText,
-    }
+  if (!target) {
+    return createUnknown(`unsafe-${action}-target`, sourceText)
   }
 
   if (action === 'delete') {
     return {
       action,
-      target: detectTarget(text, { includePosition: true }),
+      target,
       sourceText,
     }
   }
@@ -185,7 +189,7 @@ export function parseCommand(rawText: string): ParsedCommand {
     if (direction) {
       return {
         action,
-        target: detectTarget(text),
+        target,
         mode: 'relative',
         direction,
         distance: 48,
@@ -196,16 +200,12 @@ export function parseCommand(rawText: string): ParsedCommand {
     const position = findDictionaryMatch<CommandPosition>(text, positionKeywords)
 
     if (!position) {
-      return {
-        action: 'unknown',
-        reason: 'missing-position',
-        sourceText,
-      }
+      return createUnknown('missing-position', sourceText)
     }
 
     return {
       action,
-      target: detectTarget(text),
+      target,
       mode: 'absolute',
       position,
       sourceText,
@@ -213,55 +213,45 @@ export function parseCommand(rawText: string): ParsedCommand {
   }
 
   if (action === 'recolor') {
-    const color = findDictionaryMatch<CommandColor>(text, colorKeywords)
+    const color = findDictionaryMatch<CommandColor>(
+      recolorParts?.colorText ?? text,
+      colorKeywords,
+    )
 
     if (!color) {
-      return {
-        action: 'unknown',
-        reason: 'missing-color',
-        sourceText,
-      }
+      return createUnknown('missing-color', sourceText)
     }
 
     return {
       action,
-      target: detectTarget(text),
+      target,
       color,
       sourceText,
     }
   }
 
-  if (action === 'resize') {
-    return {
-      action,
-      target: detectTarget(text),
-      direction: includesAny(text, ['缩小', '变小']) ? 'smaller' : 'larger',
-      sourceText,
-    }
+  return {
+    action,
+    target,
+    direction: includesAny(text, ['缩小', '变小']) ? 'smaller' : 'larger',
+    sourceText,
   }
+}
 
-  if (action !== 'create') {
-    return {
-      action: 'unknown',
-      reason: 'unsupported-action',
-      sourceText,
-    }
-  }
-
+function parseCreateCommand(text: string, sourceText: string): ParsedCommand {
   const shape = findDictionaryMatch<ShapeKind>(text, shapeKeywords)
 
   if (!shape) {
-    return {
-      action: 'unknown',
-      reason: 'missing-shape',
-      sourceText,
-    }
+    return createUnknown('missing-shape', sourceText)
+  }
+
+  if (shape === 'text') {
+    return createUnknown('planner-required-text-command', sourceText)
   }
 
   const color = findDictionaryMatch<CommandColor>(text, colorKeywords)
   const position = findDictionaryMatch<CommandPosition>(text, positionKeywords)
   const size = findDictionaryMatch<CommandSize>(text, sizeKeywords) ?? 'medium'
-  const textContent = shape === 'text' ? extractTextContent(sourceText) : undefined
 
   return {
     action: 'create',
@@ -269,7 +259,36 @@ export function parseCommand(rawText: string): ParsedCommand {
     color,
     position,
     size,
-    text: textContent,
     sourceText,
   }
+}
+
+export function parseCommand(rawText: string): ParsedCommand {
+  const sourceText = rawText.trim()
+  const text = normalizeCommandText(sourceText)
+
+  if (!text) {
+    return createUnknown('empty-input', sourceText)
+  }
+
+  const simpleAction = detectSimpleAction(text)
+
+  if (simpleAction) {
+    return {
+      action: simpleAction,
+      sourceText,
+    }
+  }
+
+  const editAction = detectEditAction(text)
+
+  if (editAction) {
+    return parseEditCommand(editAction, text, sourceText)
+  }
+
+  if (detectCreateAction(text)) {
+    return parseCreateCommand(text, sourceText)
+  }
+
+  return createUnknown('unsupported-action', sourceText)
 }
