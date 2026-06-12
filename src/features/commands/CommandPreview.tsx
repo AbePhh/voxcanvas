@@ -19,6 +19,24 @@ function formatCommand(command: ParsedCommand) {
     ].join(' / ')
   }
 
+  if (command.action === 'move') {
+    return command.mode === 'relative'
+      ? `Move ${command.target.mode} target ${command.direction}`
+      : `Move ${command.target.mode} target to ${command.position}`
+  }
+
+  if (command.action === 'recolor') {
+    return `Recolor ${command.target.mode} target to ${command.color}`
+  }
+
+  if (command.action === 'resize') {
+    return `Resize ${command.target.mode} target ${command.direction}`
+  }
+
+  if (command.action === 'delete') {
+    return `Delete ${command.target.mode} target`
+  }
+
   return command.action
 }
 

@@ -3,6 +3,10 @@ import './App.css'
 import {
   applyClearCommand,
   applyCreateCommand,
+  applyDeleteCommand,
+  applyMoveCommand,
+  applyRecolorCommand,
+  applyResizeCommand,
   applyRedoCommand,
   applyUndoCommand,
 } from './features/canvas/canvasOperations'
@@ -19,6 +23,14 @@ function App() {
       switch (command.action) {
         case 'create':
           return applyCreateCommand(current, command)
+        case 'delete':
+          return applyDeleteCommand(current, command)
+        case 'move':
+          return applyMoveCommand(current, command)
+        case 'recolor':
+          return applyRecolorCommand(current, command)
+        case 'resize':
+          return applyResizeCommand(current, command)
         case 'clear':
           return applyClearCommand(current)
         case 'undo':

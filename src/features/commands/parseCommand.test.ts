@@ -55,4 +55,61 @@ describe('parseCommand', () => {
       reason: 'missing-shape',
     })
   })
+
+  it('parses edit and delete commands', () => {
+    expect(parseCommand('把刚才那个圆移动到右下角')).toMatchObject({
+      action: 'move',
+      mode: 'absolute',
+      position: 'bottom-right',
+      target: {
+        mode: 'last',
+        shape: 'circle',
+      },
+    })
+
+    expect(parseCommand('把它移动到右下角')).toMatchObject({
+      action: 'move',
+      mode: 'absolute',
+      position: 'bottom-right',
+      target: {
+        mode: 'selected',
+      },
+    })
+
+    expect(parseCommand('把它往右移动一点')).toMatchObject({
+      action: 'move',
+      mode: 'relative',
+      direction: 'right',
+      distance: 48,
+      target: {
+        mode: 'selected',
+      },
+    })
+
+    expect(parseCommand('把矩形改成黄色')).toMatchObject({
+      action: 'recolor',
+      color: 'yellow',
+      target: {
+        mode: 'shape',
+        shape: 'rect',
+      },
+    })
+
+    expect(parseCommand('把选中的图形缩小')).toMatchObject({
+      action: 'resize',
+      direction: 'smaller',
+      target: {
+        mode: 'selected',
+      },
+    })
+
+    expect(parseCommand('删除左边的三角形')).toMatchObject({
+      action: 'delete',
+      target: {
+        mode: 'shape',
+        shape: 'triangle',
+        position: 'left',
+      },
+    })
+  })
 })
