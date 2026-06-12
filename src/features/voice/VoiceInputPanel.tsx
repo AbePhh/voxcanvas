@@ -1,4 +1,5 @@
 import { useVoiceInput } from './useVoiceInput'
+import { CommandPreview } from '../commands/CommandPreview'
 import './VoiceInputPanel.css'
 
 export function VoiceInputPanel() {
@@ -54,6 +55,8 @@ export function VoiceInputPanel() {
           <p className="placeholder">Speech recognition output will appear here.</p>
         )}
       </div>
+
+      <CommandPreview text={transcript || interimTranscript} />
 
       {supportStatus === 'unsupported' ? (
         <p className="voice-message">
