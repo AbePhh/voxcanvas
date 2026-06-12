@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useVoiceInput } from './useVoiceInput'
 import { createTargetFeedback } from '../canvas/targetDescriptions'
+import {
+  createPendingClarification,
+  resolveClarificationResponse,
+} from '../commands/clarification'
+import type { PendingClarification } from '../commands/clarification'
 import { CommandPreview } from '../commands/CommandPreview'
 import { parseCommand } from '../commands/parseCommand'
 import type { ParsedCommand } from '../commands/types'
@@ -40,6 +45,8 @@ export function VoiceInputPanel({
   const [clarificationFeedback, setClarificationFeedback] = useState<ReturnType<
     typeof createTargetFeedback
   > | null>(null)
+  const [pendingClarification, setPendingClarification] =
+    useState<PendingClarification | null>(null)
   const { isPlanning, planCommand, plannerResult, resetPlanner } = useCommandPlanner()
 
   useEffect(() => {
@@ -55,16 +62,65 @@ export function VoiceInputPanel({
     }
 
     lastExecutedTranscriptRef.current = transcript
+
+    if (pendingClarification) {
+      const clarifiedCommand = resolveClarificationResponse(
+        transcript,
+        pendingClarification,
+      )
+
+      if (clarifiedCommand) {
+        const clarifiedFeedback = createTargetFeedback(clarifiedCommand, canvasState)
+
+        if (clarifiedFeedback.status !== 'ok') {
+          queueMicrotask(() => {
+            setClarificationFeedback(clarifiedFeedback)
+            setPendingClarification(
+              clarifiedFeedback.status === 'ambiguous'
+                ? createPendingClarification(
+                    clarifiedCommand,
+                    clarifiedFeedback.candidates,
+                    transcript,
+                  )
+                : null,
+            )
+          })
+          return
+        }
+
+        queueMicrotask(() => {
+          setClarificationFeedback(null)
+          setPendingClarification(null)
+        })
+        onCommandParsed?.(clarifiedCommand)
+        return
+      }
+    }
+
     const localCommand = parseCommand(transcript)
     const localTargetFeedback = createTargetFeedback(localCommand, canvasState)
 
     if (!shouldUseAiPlanner(transcript, localCommand.action)) {
       if (localTargetFeedback.status !== 'ok') {
-        queueMicrotask(() => setClarificationFeedback(localTargetFeedback))
+        queueMicrotask(() => {
+          setClarificationFeedback(localTargetFeedback)
+          setPendingClarification(
+            localTargetFeedback.status === 'ambiguous'
+              ? createPendingClarification(
+                  localCommand,
+                  localTargetFeedback.candidates,
+                  transcript,
+                )
+              : null,
+          )
+        })
         return
       }
 
-      queueMicrotask(() => setClarificationFeedback(null))
+      queueMicrotask(() => {
+        setClarificationFeedback(null)
+        setPendingClarification(null)
+      })
       onCommandParsed?.(localCommand)
       return
     }
@@ -78,19 +134,34 @@ export function VoiceInputPanel({
         const plannedTargetFeedback = createTargetFeedback(result.command, canvasState)
 
         if (plannedTargetFeedback.status !== 'ok') {
-          queueMicrotask(() => setClarificationFeedback(plannedTargetFeedback))
+          queueMicrotask(() => {
+            setClarificationFeedback(plannedTargetFeedback)
+            setPendingClarification(
+              plannedTargetFeedback.status === 'ambiguous'
+                ? createPendingClarification(
+                    result.command,
+                    plannedTargetFeedback.candidates,
+                    transcript,
+                  )
+                : null,
+            )
+          })
           return
         }
 
-        queueMicrotask(() => setClarificationFeedback(null))
+        queueMicrotask(() => {
+          setClarificationFeedback(null)
+          setPendingClarification(null)
+        })
         onCommandParsed?.(result.command)
       }
     })
-  }, [canvasState, onCommandParsed, planCommand, transcript])
+  }, [canvasState, onCommandParsed, pendingClarification, planCommand, transcript])
 
   const handleClear = () => {
     resetTranscript()
     setClarificationFeedback(null)
+    setPendingClarification(null)
   }
 
   return (
@@ -145,7 +216,7 @@ export function VoiceInputPanel({
           {clarificationFeedback.status === 'ambiguous' ? (
             <ul>
               {clarificationFeedback.candidates.map((candidate) => (
-                <li key={candidate}>{candidate}</li>
+                <li key={candidate.id}>{candidate.label}</li>
               ))}
             </ul>
           ) : null}

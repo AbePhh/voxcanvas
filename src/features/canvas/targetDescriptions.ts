@@ -8,7 +8,12 @@ import { colorStyles } from './colorStyles'
 import { matchesTargetPosition, resolveTargetShape } from './targetMatching'
 import type { CanvasState, ShapeObject } from './types'
 
-type TargetFeedback =
+export type TargetCandidate = {
+  id: string
+  label: string
+}
+
+export type TargetFeedback =
   | {
       status: 'ok'
     }
@@ -19,7 +24,7 @@ type TargetFeedback =
   | {
       status: 'ambiguous'
       message: string
-      candidates: string[]
+      candidates: TargetCandidate[]
     }
 
 const shapeLabels = {
@@ -118,7 +123,10 @@ export function createTargetFeedback(
     }
   }
 
-  const candidates = result.matches.map((shape) => describeShape(shape, canvasState))
+  const candidates = result.matches.map((shape) => ({
+    id: shape.id,
+    label: describeShape(shape, canvasState),
+  }))
 
   return {
     status: 'ambiguous',

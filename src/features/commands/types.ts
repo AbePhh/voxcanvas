@@ -47,6 +47,7 @@ export type CreateShapeCommand = {
 
 export type CommandTarget = {
   mode: 'selected' | 'last' | 'shape' | 'position' | 'any'
+  id?: string
   shape?: ShapeKind
   position?: CommandPosition
   color?: CommandColor

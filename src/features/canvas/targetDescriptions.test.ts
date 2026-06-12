@@ -95,8 +95,14 @@ describe('createTargetFeedback', () => {
       status: 'ambiguous',
       message: '找到 2 个匹配的绿色圆形，请说得更具体一些。',
       candidates: expect.arrayContaining([
-        '左上方的绿色圆形',
-        '当前选中的中间的绿色圆形',
+        expect.objectContaining({
+          id: 'green-circle-1',
+          label: '左上方的绿色圆形',
+        }),
+        expect.objectContaining({
+          id: 'green-circle-2',
+          label: '当前选中的中间的绿色圆形',
+        }),
       ]),
     })
   })

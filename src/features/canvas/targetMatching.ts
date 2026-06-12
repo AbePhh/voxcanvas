@@ -53,6 +53,10 @@ export function matchesTargetFilters(
   target: CommandTarget,
   canvas: Pick<CanvasState, 'width' | 'height'>,
 ) {
+  if (target.id && shape.id !== target.id) {
+    return false
+  }
+
   if (target.shape && shape.type !== target.shape) {
     return false
   }
