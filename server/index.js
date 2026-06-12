@@ -50,7 +50,7 @@ function buildPlannerPrompt(input) {
     'Allowed positions: top-left, top, top-right, left, center, right, bottom-left, bottom, bottom-right.',
     'Allowed sizes: small, medium, large.',
     'Allowed target modes: selected, last, shape, position, any.',
-    'Targets may include filters: { mode, shape?, color?, position? }.',
+    'Targets may include filters: { mode, id?, shape?, color?, position? }.',
     '',
     'Rules:',
     '- Prefer create text for text box, title, label, words, writing, or inserting text.',

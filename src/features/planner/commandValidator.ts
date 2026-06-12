@@ -88,6 +88,7 @@ function normalizeTarget(value: unknown): CommandTarget | null {
 
   return {
     mode: value.mode as CommandTarget['mode'],
+    id: typeof value.id === 'string' ? value.id : undefined,
     shape: value.shape as ShapeKind | undefined,
     position: value.position as CommandPosition | undefined,
     color: value.color as CommandColor | undefined,
