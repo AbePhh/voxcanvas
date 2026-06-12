@@ -6,6 +6,7 @@ import type {
   CommandTarget,
 } from '../commands/types'
 import { matchesCommandColor } from '../canvas/colorStyles'
+import { matchesTargetPosition } from '../canvas/targetMatching'
 import type { CommandPlannerInput, CommandPlannerResult } from './types'
 
 const allowedActions = new Set([
@@ -47,18 +48,6 @@ const allowedTargetModes = new Set(['selected', 'last', 'shape', 'position', 'an
 const allowedMoveModes = new Set(['absolute', 'relative'])
 const allowedMoveDirections = new Set(['left', 'right', 'up', 'down'])
 const allowedResizeDirections = new Set(['larger', 'smaller'])
-const positionAnchors: Record<CommandPosition, { x: number; y: number }> = {
-  'top-left': { x: 0.2, y: 0.22 },
-  top: { x: 0.5, y: 0.2 },
-  'top-right': { x: 0.8, y: 0.22 },
-  left: { x: 0.2, y: 0.52 },
-  center: { x: 0.5, y: 0.52 },
-  right: { x: 0.8, y: 0.52 },
-  'bottom-left': { x: 0.2, y: 0.78 },
-  bottom: { x: 0.5, y: 0.8 },
-  'bottom-right': { x: 0.8, y: 0.78 },
-}
-
 type ValidatorOptions = {
   canvas?: CommandPlannerInput['canvas']
 }
@@ -103,25 +92,6 @@ function normalizeTarget(value: unknown): CommandTarget | null {
     position: value.position as CommandPosition | undefined,
     color: value.color as CommandColor | undefined,
   }
-}
-
-function matchesTargetPosition(
-  object: CommandPlannerInput['canvas']['objects'][number],
-  canvas: CommandPlannerInput['canvas'],
-  position: CommandPosition,
-) {
-  const desiredAnchor = positionAnchors[position]
-  const objectCenterX = object.x + object.width / 2
-  const objectCenterY = object.y + object.height / 2
-  const desiredX = canvas.width * desiredAnchor.x
-  const desiredY = canvas.height * desiredAnchor.y
-  const xTolerance = canvas.width * 0.22
-  const yTolerance = canvas.height * 0.22
-
-  return (
-    Math.abs(objectCenterX - desiredX) <= xTolerance &&
-    Math.abs(objectCenterY - desiredY) <= yTolerance
-  )
 }
 
 function countTargetMatches(

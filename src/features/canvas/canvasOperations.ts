@@ -1,5 +1,4 @@
 import type {
-  CommandPosition,
   CommandTarget,
   CreateShapeCommand,
   DeleteShapeCommand,
@@ -7,7 +6,8 @@ import type {
   RecolorShapeCommand,
   ResizeShapeCommand,
 } from '../commands/types'
-import { colorStyles, matchesCommandColor } from './colorStyles'
+import { colorStyles } from './colorStyles'
+import { positionAnchors, resolveTargetShape } from './targetMatching'
 import type { CanvasSnapshot, CanvasState, ShapeObject } from './types'
 
 const sizeScale = {
@@ -22,18 +22,6 @@ const baseSizeByShape = {
   triangle: { width: 144, height: 120 },
   line: { width: 180, height: 0 },
   text: { width: 220, height: 40 },
-}
-
-const positionAnchors: Record<CommandPosition, { x: number; y: number }> = {
-  'top-left': { x: 0.2, y: 0.22 },
-  top: { x: 0.5, y: 0.2 },
-  'top-right': { x: 0.8, y: 0.22 },
-  left: { x: 0.2, y: 0.52 },
-  center: { x: 0.5, y: 0.52 },
-  right: { x: 0.8, y: 0.52 },
-  'bottom-left': { x: 0.2, y: 0.78 },
-  bottom: { x: 0.5, y: 0.8 },
-  'bottom-right': { x: 0.8, y: 0.78 },
 }
 
 function createShapeId(shape: string) {
@@ -81,56 +69,8 @@ function getShapePosition(
 }
 
 function findTargetShape(state: CanvasState, target: CommandTarget) {
-  const matchesTargetFilters = (shape: ShapeObject) => {
-    if (target.shape && shape.type !== target.shape) {
-      return false
-    }
-
-    if (target.color && !matchesCommandColor(shape.fill, target.color)) {
-      return false
-    }
-
-    if (target.position) {
-      const desiredAnchor = positionAnchors[target.position]
-      const shapeCenterX = shape.x + shape.width / 2
-      const shapeCenterY = shape.y + shape.height / 2
-      const desiredX = state.width * desiredAnchor.x
-      const desiredY = state.height * desiredAnchor.y
-      const xTolerance = state.width * 0.22
-      const yTolerance = state.height * 0.22
-
-      return (
-        Math.abs(shapeCenterX - desiredX) <= xTolerance &&
-        Math.abs(shapeCenterY - desiredY) <= yTolerance
-      )
-    }
-
-    return true
-  }
-
-  const reversedMatches = [...state.shapes].reverse().filter(matchesTargetFilters)
-
-  if (target.mode === 'selected' && state.selectedId) {
-    const selectedShape = state.shapes.find((shape) => shape.id === state.selectedId)
-
-    if (selectedShape && matchesTargetFilters(selectedShape)) {
-      return selectedShape
-    }
-  }
-
-  if (target.mode === 'selected') {
-    return undefined
-  }
-
-  if (target.mode === 'last') {
-    return reversedMatches[0]
-  }
-
-  if (target.mode === 'shape' || target.mode === 'position' || target.mode === 'any') {
-    return reversedMatches.length === 1 ? reversedMatches[0] : undefined
-  }
-
-  return undefined
+  const result = resolveTargetShape(state, target)
+  return result.status === 'matched' ? result.shape : undefined
 }
 
 function updateTargetShape(
