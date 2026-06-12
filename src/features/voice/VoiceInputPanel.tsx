@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useVoiceInput } from './useVoiceInput'
+import { createTargetFeedback } from '../canvas/targetDescriptions'
 import { CommandPreview } from '../commands/CommandPreview'
 import { parseCommand } from '../commands/parseCommand'
 import type { ParsedCommand } from '../commands/types'
@@ -36,6 +37,9 @@ export function VoiceInputPanel({
     [previewText],
   )
   const lastExecutedTranscriptRef = useRef('')
+  const [clarificationFeedback, setClarificationFeedback] = useState<ReturnType<
+    typeof createTargetFeedback
+  > | null>(null)
   const { isPlanning, planCommand, plannerResult, resetPlanner } = useCommandPlanner()
 
   useEffect(() => {
@@ -52,8 +56,15 @@ export function VoiceInputPanel({
 
     lastExecutedTranscriptRef.current = transcript
     const localCommand = parseCommand(transcript)
+    const localTargetFeedback = createTargetFeedback(localCommand, canvasState)
 
     if (!shouldUseAiPlanner(transcript, localCommand.action)) {
+      if (localTargetFeedback.status !== 'ok') {
+        queueMicrotask(() => setClarificationFeedback(localTargetFeedback))
+        return
+      }
+
+      queueMicrotask(() => setClarificationFeedback(null))
       onCommandParsed?.(localCommand)
       return
     }
@@ -64,10 +75,23 @@ export function VoiceInputPanel({
       }
 
       if (result.status === 'planned') {
+        const plannedTargetFeedback = createTargetFeedback(result.command, canvasState)
+
+        if (plannedTargetFeedback.status !== 'ok') {
+          queueMicrotask(() => setClarificationFeedback(plannedTargetFeedback))
+          return
+        }
+
+        queueMicrotask(() => setClarificationFeedback(null))
         onCommandParsed?.(result.command)
       }
     })
   }, [canvasState, onCommandParsed, planCommand, transcript])
+
+  const handleClear = () => {
+    resetTranscript()
+    setClarificationFeedback(null)
+  }
 
   return (
     <section className="voice-panel" aria-label="Voice input">
@@ -93,7 +117,11 @@ export function VoiceInputPanel({
         <button type="button" disabled={!isListening} onClick={stopListening}>
           Stop
         </button>
-        <button type="button" disabled={!hasTranscript} onClick={resetTranscript}>
+        <button
+          type="button"
+          disabled={!hasTranscript && !clarificationFeedback}
+          onClick={handleClear}
+        >
           Clear
         </button>
       </div>
@@ -110,6 +138,19 @@ export function VoiceInputPanel({
       </div>
 
       <CommandPreview command={parsedCommand} />
+      {clarificationFeedback && clarificationFeedback.status !== 'ok' ? (
+        <div className="target-feedback" aria-live="polite">
+          <h3>Target Needs Clarification</h3>
+          <p>{clarificationFeedback.message}</p>
+          {clarificationFeedback.status === 'ambiguous' ? (
+            <ul>
+              {clarificationFeedback.candidates.map((candidate) => (
+                <li key={candidate}>{candidate}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
       <PlannerPreview
         canvasState={canvasState}
         enabled={
