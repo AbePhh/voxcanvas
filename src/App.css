@@ -48,7 +48,7 @@
 
 .workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
+  grid-template-columns: minmax(0, 1fr) 320px;
   gap: 18px;
   align-items: stretch;
 }
@@ -60,9 +60,15 @@
   padding: 14px;
 }
 
+.side-panel {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+}
+
 .inspector {
-  background: #ffffff;
   border: 1px solid #d7dde8;
+  background: #ffffff;
   padding: 18px;
 }
 
