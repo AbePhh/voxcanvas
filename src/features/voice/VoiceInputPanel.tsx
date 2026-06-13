@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { FormEvent } from 'react'
 import { useVoiceInput } from './useVoiceInput'
 import { createTargetFeedback } from '../canvas/targetDescriptions'
 import {
@@ -43,8 +44,9 @@ export function VoiceInputPanel({
     transcript,
   } = useVoiceInput()
 
+  const [textCommand, setTextCommand] = useState('')
   const hasTranscript = transcript || interimTranscript
-  const previewText = transcript || interimTranscript
+  const previewText = transcript || interimTranscript || textCommand
   const parsedCommand = useMemo(
     () => (previewText ? parseCommand(previewText) : null),
     [previewText],
@@ -66,16 +68,10 @@ export function VoiceInputPanel({
     }
   }, [isListening, resetPlanner])
 
-  useEffect(() => {
-    if (!transcript || transcript === lastExecutedTranscriptRef.current) {
-      return
-    }
-
-    lastExecutedTranscriptRef.current = transcript
-
+  const processCommandText = useCallback((commandText: string) => {
     if (pendingExportClarification) {
       const clarifiedExportCommand = resolveExportClarificationResponse(
-        transcript,
+        commandText,
         pendingExportClarification,
       )
 
@@ -86,13 +82,13 @@ export function VoiceInputPanel({
           setPendingClarification(null)
         })
         onCommandParsed?.(clarifiedExportCommand)
-        return
+        return Promise.resolve()
       }
     }
 
     if (pendingClarification) {
       const clarifiedCommand = resolveClarificationResponse(
-        transcript,
+        commandText,
         pendingClarification,
       )
 
@@ -107,12 +103,12 @@ export function VoiceInputPanel({
                 ? createPendingClarification(
                     clarifiedCommand,
                     clarifiedFeedback.candidates,
-                    transcript,
+                    commandText,
                   )
                 : null,
             )
           })
-          return
+          return Promise.resolve()
         }
 
         queueMicrotask(() => {
@@ -120,11 +116,11 @@ export function VoiceInputPanel({
           setPendingClarification(null)
         })
         onCommandParsed?.(clarifiedCommand)
-        return
+        return Promise.resolve()
       }
     }
 
-    const localCommand = parseCommand(transcript)
+    const localCommand = parseCommand(commandText)
     const localTargetFeedback = createTargetFeedback(localCommand, canvasState)
 
     if (localCommand.action === 'export' && !localCommand.format) {
@@ -133,10 +129,10 @@ export function VoiceInputPanel({
         setClarificationFeedback(null)
         setPendingClarification(null)
       })
-      return
+      return Promise.resolve()
     }
 
-    const normalizationDecision = getNormalizationDecision(transcript, localCommand)
+    const normalizationDecision = getNormalizationDecision(commandText, localCommand)
     const needsAiNormalization =
       normalizationDecision.useAi || localTargetFeedback.status !== 'ok'
 
@@ -147,10 +143,10 @@ export function VoiceInputPanel({
         setPendingExportClarification(null)
       })
       onCommandParsed?.(localCommand)
-      return
+      return Promise.resolve()
     }
 
-    void planCommand(transcript, canvasState, localCommand).then((result) => {
+    return planCommand(commandText, canvasState, localCommand).then((result) => {
       if (!result) {
         return
       }
@@ -166,7 +162,7 @@ export function VoiceInputPanel({
                 ? createPendingClarification(
                     result.command,
                     plannedTargetFeedback.candidates,
-                    transcript,
+                    commandText,
                   )
                 : null,
             )
@@ -191,7 +187,7 @@ export function VoiceInputPanel({
               ? createPendingClarification(
                   localCommand,
                   localTargetFeedback.candidates,
-                  transcript,
+                  commandText,
                 )
               : null,
           )
@@ -214,11 +210,37 @@ export function VoiceInputPanel({
     pendingClarification,
     pendingExportClarification,
     planCommand,
+  ])
+
+  useEffect(() => {
+    if (!transcript || transcript === lastExecutedTranscriptRef.current) {
+      return
+    }
+
+    lastExecutedTranscriptRef.current = transcript
+
+    void processCommandText(transcript)
+  }, [
+    processCommandText,
     transcript,
   ])
 
+  const handleTextCommandSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+
+    const commandText = textCommand.trim()
+
+    if (!commandText) {
+      return
+    }
+
+    resetPlanner()
+    void processCommandText(commandText)
+  }
+
   const handleClear = () => {
     resetTranscript()
+    setTextCommand('')
     setClarificationFeedback(null)
     setPendingClarification(null)
     setPendingExportClarification(null)
@@ -250,12 +272,25 @@ export function VoiceInputPanel({
         </button>
         <button
           type="button"
-          disabled={!hasTranscript && !clarificationFeedback}
+          disabled={!hasTranscript && !textCommand && !clarificationFeedback}
           onClick={handleClear}
         >
           Clear
         </button>
       </div>
+
+      <form className="text-command-form" onSubmit={handleTextCommandSubmit}>
+        <input
+          type="text"
+          value={textCommand}
+          onChange={(event) => setTextCommand(event.target.value)}
+          placeholder="Type a command when the microphone is unavailable."
+          aria-label="Typed drawing command"
+        />
+        <button type="submit" disabled={!textCommand.trim() || isPlanning}>
+          Run
+        </button>
+      </form>
 
       <div className="transcript-box" aria-live="polite">
         {hasTranscript ? (
