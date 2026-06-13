@@ -7,7 +7,7 @@
 
 .app-header {
   display: grid;
-  grid-template-columns: 320px minmax(760px, 1fr) 340px;
+  grid-template-columns: 340px minmax(760px, 1fr) 320px;
   align-items: flex-end;
   gap: 20px;
   margin-bottom: 24px;
@@ -53,8 +53,8 @@
 
 .workspace {
   display: grid;
-  grid-template-areas: "controls canvas context";
-  grid-template-columns: 320px minmax(760px, 1fr) 340px;
+  grid-template-areas: "context canvas controls";
+  grid-template-columns: 340px minmax(760px, 1fr) 320px;
   gap: 20px;
   align-items: start;
   height: min(760px, calc(100vh - 176px));
