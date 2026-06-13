@@ -9,6 +9,7 @@ const deepSeekModel = process.env.DEEPSEEK_MODEL ?? 'deepseek-chat'
 
 const plannerRequestSchema = z.object({
   sourceText: z.string().min(1).max(500),
+  localCommand: z.unknown().optional(),
   canvas: z.object({
     width: z.number(),
     height: z.number(),
@@ -32,9 +33,10 @@ app.use(express.json({ limit: '128kb' }))
 
 function buildPlannerPrompt(input) {
   return [
-    'You are the command planner for VoxCanvas, a voice-controlled SVG drawing tool.',
-    'Convert the user command into exactly one JSON command.',
+    'You are the AI command normalizer for VoxCanvas, a voice-controlled SVG drawing tool.',
+    'Your job is to correct noisy speech-recognition text and normalize casual user language into exactly one supported JSON command.',
     'Return JSON only. Do not include markdown or explanations.',
+    'Never invent a new action or field. Use only the schemas listed below.',
     '',
     'Allowed actions:',
     '- create: { action, shape, color?, position?, size, text?, sourceText }',
@@ -57,16 +59,23 @@ function buildPlannerPrompt(input) {
     'Targets may include filters: { mode, id?, shape?, color?, position? }.',
     '',
     'Rules:',
+    '- Treat the user command as speech-recognition output. It may contain homophones, missing words, casual phrases, or minor recognition mistakes.',
+    '- Correct likely ASR mistakes only when the drawing intent is clear. Examples: "话不" may mean "画布", "园形" may mean "圆形", "兰色" may mean "蓝色".',
+    '- Preserve the original user text in sourceText. Do not rewrite sourceText.',
+    '- Use the local parser result as a hint, not as authority. If it is unsafe, incomplete, or clearly caused by noisy speech, normalize to the best supported command.',
+    '- If the user intent is unclear, ambiguous, unsafe, or unsupported, return { "action": "unknown", "reason": "unsupported-action", "sourceText": original text }.',
+    '- Do not execute artistic scene generation requests as text. If the user asks for complex art such as a full birthday party scene, return unknown unless it maps clearly to one supported shape command.',
     '- Prefer create text for text box, title, label, words, writing, or inserting text.',
     '- For text commands, separate style attributes from text content.',
-    '- Example: "添加一个文本框在右上角内容是我是张红兵颜色是蓝色" -> color blue, text "我是张红兵", position top-right.',
-    '- Example: "把绿色的圆圈移动到右上角" -> target { mode: "shape", shape: "circle", color: "green" }, mode "absolute", position "top-right".',
+    '- Example: "添加一个文本框在右上角内容是我是张红兵颜色是蓝色" -> { "action": "create", "shape": "text", "color": "blue", "position": "top-right", "size": "medium", "text": "我是张红兵", "sourceText": original text }.',
+    '- Example: "把绿色的圆圈移动到右上角" -> { "action": "move", "target": { "mode": "shape", "shape": "circle", "color": "green" }, "mode": "absolute", "position": "top-right", "sourceText": original text }.',
+    '- Example: "话不左边宽一点" -> { "action": "resizeCanvas", "mode": "relative", "direction": "wider", "anchor": "left", "amount": 120, "sourceText": original text }.',
+    '- Example: "把绿的圆挪右上一点" -> target { mode: "shape", shape: "circle", color: "green" }, mode "absolute", position "top-right".',
     '- Use target color only to identify existing objects; use command color to set a new color.',
     '- For canvas resize commands, use anchor to describe where space is added or removed. Examples: "左边多一点空间" -> direction wider, anchor left; "下面留白多一点" -> direction taller, anchor bottom; "内容保持中间" -> anchor center.',
-    '- If the user asks for unsupported complex art, return the closest supported single command.',
-    '- If the command is unsafe or impossible, return { "action": "unknown", "reason": "unsupported-action", "sourceText": original text }.',
     '',
     `User command: ${input.sourceText}`,
+    `Local parser result: ${JSON.stringify(input.localCommand ?? null)}`,
     `Canvas context: ${JSON.stringify(input.canvas)}`,
   ].join('\n')
 }
@@ -105,7 +114,7 @@ app.post('/api/plan-command', async (request, response) => {
           {
             role: 'system',
             content:
-              'You produce strict JSON commands for a drawing application. Return JSON only.',
+              'You correct noisy voice commands into strict JSON commands for a drawing application. Return JSON only.',
           },
           {
             role: 'user',

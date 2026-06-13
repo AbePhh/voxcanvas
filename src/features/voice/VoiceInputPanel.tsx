@@ -133,23 +133,11 @@ export function VoiceInputPanel({
       return
     }
 
-    if (!shouldUseAiPlanner(transcript, localCommand.action)) {
-      if (localTargetFeedback.status !== 'ok') {
-        queueMicrotask(() => {
-          setClarificationFeedback(localTargetFeedback)
-          setPendingClarification(
-            localTargetFeedback.status === 'ambiguous'
-              ? createPendingClarification(
-                  localCommand,
-                  localTargetFeedback.candidates,
-                  transcript,
-                )
-              : null,
-          )
-        })
-        return
-      }
+    const needsAiNormalization =
+      shouldUseAiPlanner(transcript, localCommand) ||
+      localTargetFeedback.status !== 'ok'
 
+    if (!needsAiNormalization) {
       queueMicrotask(() => {
         setClarificationFeedback(null)
         setPendingClarification(null)
@@ -159,7 +147,7 @@ export function VoiceInputPanel({
       return
     }
 
-    void planCommand(transcript, canvasState).then((result) => {
+    void planCommand(transcript, canvasState, localCommand).then((result) => {
       if (!result) {
         return
       }
@@ -189,6 +177,32 @@ export function VoiceInputPanel({
           setPendingExportClarification(null)
         })
         onCommandParsed?.(result.command)
+        return
+      }
+
+      if (localTargetFeedback.status !== 'ok') {
+        queueMicrotask(() => {
+          setClarificationFeedback(localTargetFeedback)
+          setPendingClarification(
+            localTargetFeedback.status === 'ambiguous'
+              ? createPendingClarification(
+                  localCommand,
+                  localTargetFeedback.candidates,
+                  transcript,
+                )
+              : null,
+          )
+        })
+        return
+      }
+
+      if (localCommand.action !== 'unknown') {
+        queueMicrotask(() => {
+          setClarificationFeedback(null)
+          setPendingClarification(null)
+          setPendingExportClarification(null)
+        })
+        onCommandParsed?.(localCommand)
       }
     })
   }, [
@@ -284,6 +298,7 @@ export function VoiceInputPanel({
           parsedCommand?.action === 'unknown'
         }
         isPlanning={isPlanning}
+        localCommand={parsedCommand}
         result={plannerResult}
         sourceText={previewText}
       />

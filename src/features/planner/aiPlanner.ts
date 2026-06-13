@@ -1,5 +1,7 @@
 import { validatePlannedCommand } from './commandValidator'
 import type { CommandPlanner, CommandPlannerResult } from './types'
+import { getNormalizationDecision } from './normalizationPolicy'
+import type { ParsedCommand } from '../commands/types'
 
 type PlannerApiResponse = {
   rawCommand?: unknown
@@ -37,9 +39,6 @@ export const aiPlanner: CommandPlanner = async (input): Promise<CommandPlannerRe
   }
 }
 
-export function shouldUseAiPlanner(sourceText: string, localAction: string) {
-  return (
-    localAction === 'unknown' ||
-    /文本|文字|文本框|标题|写着|写上|内容是|内容为|插入/.test(sourceText)
-  )
+export function shouldUseAiPlanner(sourceText: string, localCommand: ParsedCommand) {
+  return getNormalizationDecision(sourceText, localCommand).useAi
 }
