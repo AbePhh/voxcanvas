@@ -7,6 +7,7 @@ import {
   resolveClarificationResponse,
 } from '../commands/clarification'
 import type { PendingClarification } from '../commands/clarification'
+import { isCancellationIntent } from '../commands/cancellationIntent'
 import {
   createCancellationFeedback,
   createCommandExecutionFeedback,
@@ -83,7 +84,7 @@ export function VoiceInputPanel({
   }, [isListening, resetPlanner])
 
   const processCommandText = useCallback((commandText: string) => {
-    if (/^(取消|停下|停止|算了|不用了|别执行|不要了)$/u.test(commandText.trim())) {
+    if (isCancellationIntent(commandText)) {
       resetPlanner()
       queueMicrotask(() => {
         resetPendingInteraction()
