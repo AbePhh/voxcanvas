@@ -8,6 +8,7 @@ export type PlannerCanvasObject = Pick<
 
 export type CommandPlannerInput = {
   sourceText: string
+  localCommand?: ParsedCommand
   canvas: {
     width: number
     height: number
@@ -40,9 +41,11 @@ export type CommandPlanner = (
 export function createPlannerInput(
   sourceText: string,
   canvasState: CanvasState,
+  localCommand?: ParsedCommand,
 ): CommandPlannerInput {
   return {
     sourceText,
+    localCommand,
     canvas: {
       width: canvasState.width,
       height: canvasState.height,

@@ -2,12 +2,14 @@ import { createFallbackPlannerResult } from './fallbackPlanner'
 import { createPlannerInput } from './types'
 import type { CanvasState } from '../canvas/types'
 import type { CommandPlannerResult } from './types'
+import type { ParsedCommand } from '../commands/types'
 import './PlannerPreview.css'
 
 type PlannerPreviewProps = {
   canvasState: CanvasState
   enabled: boolean
   isPlanning?: boolean
+  localCommand?: ParsedCommand | null
   result?: CommandPlannerResult | null
   sourceText: string
 }
@@ -16,6 +18,7 @@ export function PlannerPreview({
   canvasState,
   enabled,
   isPlanning = false,
+  localCommand,
   result,
   sourceText,
 }: PlannerPreviewProps) {
@@ -23,7 +26,7 @@ export function PlannerPreview({
     return null
   }
 
-  const input = createPlannerInput(sourceText, canvasState)
+  const input = createPlannerInput(sourceText, canvasState, localCommand ?? undefined)
   const previewResult = result ?? createFallbackPlannerResult(input)
 
   return (
@@ -48,6 +51,11 @@ export function PlannerPreview({
             ? {
                 reason: previewResult.reason,
                 sourceText: previewResult.input.sourceText,
+                localAction: previewResult.input.localCommand?.action,
+                localReason:
+                  previewResult.input.localCommand?.action === 'unknown'
+                    ? previewResult.input.localCommand.reason
+                    : undefined,
                 selectedId: previewResult.input.canvas.selectedId,
                 objectCount: previewResult.input.canvas.objects.length,
               }

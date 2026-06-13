@@ -90,6 +90,19 @@ describe('validatePlannedCommand', () => {
     })
   })
 
+  it('preserves unknown reasons returned by the planner', () => {
+    expect(
+      validatePlannedCommand({
+        action: 'unknown',
+        reason: 'unsupported-action',
+        sourceText: '话不左边加宽',
+      }),
+    ).toMatchObject({
+      status: 'invalid',
+      reason: 'unsupported-action',
+    })
+  })
+
   it('accepts valid edit commands', () => {
     expect(
       validatePlannedCommand(
@@ -345,8 +358,15 @@ describe('createPlannerInput', () => {
       ],
     }
 
-    expect(createPlannerInput('把靠近房子的圆移开', state)).toEqual({
+    const localCommand = {
+      action: 'unknown',
+      reason: 'unsupported-action',
       sourceText: '把靠近房子的圆移开',
+    } as const
+
+    expect(createPlannerInput('把靠近房子的圆移开', state, localCommand)).toEqual({
+      sourceText: '把靠近房子的圆移开',
+      localCommand,
       canvas: {
         width: 960,
         height: 560,

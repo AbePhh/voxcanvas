@@ -3,6 +3,7 @@ import { aiPlanner } from './aiPlanner'
 import { createPlannerInput } from './types'
 import type { CanvasState } from '../canvas/types'
 import type { CommandPlannerResult } from './types'
+import type { ParsedCommand } from '../commands/types'
 
 export function useCommandPlanner() {
   const requestIdRef = useRef(0)
@@ -15,13 +16,17 @@ export function useCommandPlanner() {
     setResult(null)
   }, [])
 
-  const planCommand = useCallback(async (sourceText: string, canvasState: CanvasState) => {
+  const planCommand = useCallback(async (
+    sourceText: string,
+    canvasState: CanvasState,
+    localCommand?: ParsedCommand,
+  ) => {
     const requestId = requestIdRef.current + 1
     requestIdRef.current = requestId
     setIsPlanning(true)
     setResult(null)
 
-    const plannerInput = createPlannerInput(sourceText, canvasState)
+    const plannerInput = createPlannerInput(sourceText, canvasState, localCommand)
     const nextResult = await aiPlanner(plannerInput)
 
     if (requestIdRef.current !== requestId) {

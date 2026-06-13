@@ -224,6 +224,15 @@ export function validatePlannedCommand(
   const sourceText =
     typeof rawValue.sourceText === 'string' ? rawValue.sourceText : 'planner-output'
 
+  if (rawValue.action === 'unknown') {
+    return {
+      status: 'invalid',
+      reason:
+        typeof rawValue.reason === 'string' ? rawValue.reason : 'unsupported-action',
+      rawValue,
+    }
+  }
+
   if (rawValue.action === 'undo' || rawValue.action === 'redo' || rawValue.action === 'clear') {
     return {
       status: 'planned',
