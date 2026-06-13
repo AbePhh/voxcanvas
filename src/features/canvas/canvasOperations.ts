@@ -10,7 +10,11 @@ import type {
   SceneCommand,
 } from '../commands/types'
 import { colorStyles } from './colorStyles'
-import { positionAnchors, resolveTargetShape } from './targetMatching'
+import {
+  positionAnchors,
+  resolveTargetSelection,
+  resolveTargetShape,
+} from './targetMatching'
 import { createShapesFromSceneCommand } from './sceneGraph'
 import type { CanvasSnapshot, CanvasState, ShapeObject } from './types'
 
@@ -117,6 +121,11 @@ function findTargetShape(state: CanvasState, target: CommandTarget) {
   return result.status === 'matched' ? result.shape : undefined
 }
 
+function findTargetShapes(state: CanvasState, target: CommandTarget) {
+  const result = resolveTargetSelection(state, target)
+  return result.status === 'matched' ? result.shapes : []
+}
+
 function updateTargetShape(
   state: CanvasState,
   target: CommandTarget,
@@ -139,15 +148,52 @@ function updateTargetShape(
   }
 }
 
-function clampShapePosition(
+function updateTargetShapes(
+  state: CanvasState,
+  target: CommandTarget,
+  updateShape: (shape: ShapeObject, selectedShapes: ShapeObject[]) => ShapeObject,
+) {
+  const targetShapes = findTargetShapes(state, target)
+
+  if (targetShapes.length === 0) {
+    return state
+  }
+
+  const targetIds = new Set(targetShapes.map((shape) => shape.id))
+
+  return {
+    ...state,
+    future: [],
+    history: [...state.history, takeSnapshot(state)],
+    selectedId: targetShapes.at(-1)?.id,
+    shapes: state.shapes.map((shape) =>
+      targetIds.has(shape.id) ? updateShape(shape, targetShapes) : shape,
+    ),
+  }
+}
+
+function getShapesBounds(shapes: ShapeObject[]) {
+  const minX = Math.min(...shapes.map((shape) => shape.x))
+  const minY = Math.min(...shapes.map((shape) => shape.y))
+  const maxX = Math.max(...shapes.map((shape) => shape.x + shape.width))
+  const maxY = Math.max(...shapes.map((shape) => shape.y + shape.height))
+
+  return {
+    x: minX,
+    y: minY,
+    width: maxX - minX,
+    height: maxY - minY,
+  }
+}
+
+function clampGroupDelta(
   canvas: Pick<CanvasState, 'width' | 'height'>,
-  shape: Pick<ShapeObject, 'width' | 'height'>,
-  x: number,
-  y: number,
+  bounds: ReturnType<typeof getShapesBounds>,
+  delta: { x: number; y: number },
 ) {
   return {
-    x: Math.max(24, Math.min(canvas.width - shape.width - 24, x)),
-    y: Math.max(24, Math.min(canvas.height - shape.height - 24, y)),
+    x: Math.max(24 - bounds.x, Math.min(canvas.width - bounds.x - bounds.width - 24, delta.x)),
+    y: Math.max(24 - bounds.y, Math.min(canvas.height - bounds.y - bounds.height - 24, delta.y)),
   }
 }
 
@@ -257,40 +303,47 @@ export function applyMoveCommand(
   state: CanvasState,
   command: MoveShapeCommand,
 ): CanvasState {
-  return updateTargetShape(state, command.target, (shape) => {
-    if (command.mode === 'relative') {
-      const distance = command.distance ?? 48
-      const delta = {
-        x:
-          command.direction === 'left'
-            ? -distance
-            : command.direction === 'right'
-              ? distance
-              : 0,
-        y:
-          command.direction === 'up'
-            ? -distance
-            : command.direction === 'down'
-              ? distance
-              : 0,
-      }
-      const position = clampShapePosition(state, shape, shape.x + delta.x, shape.y + delta.y)
+  const targetShapes = findTargetShapes(state, command.target)
 
-      return {
-        ...shape,
-        x: position.x,
-        y: position.y,
-      }
+  if (targetShapes.length === 0) {
+    return state
+  }
+
+  const bounds = getShapesBounds(targetShapes)
+  let delta: { x: number; y: number }
+
+  if (command.mode === 'relative') {
+    const distance = command.distance ?? 48
+    delta = {
+      x:
+        command.direction === 'left'
+          ? -distance
+          : command.direction === 'right'
+            ? distance
+            : 0,
+      y:
+        command.direction === 'up'
+          ? -distance
+          : command.direction === 'down'
+            ? distance
+            : 0,
     }
+  } else {
+    const position = getShapePosition({ position: command.position }, state, bounds)
 
-    const position = getShapePosition({ position: command.position }, state, shape)
-
-    return {
-      ...shape,
-      x: position.x,
-      y: position.y,
+    delta = {
+      x: position.x - bounds.x,
+      y: position.y - bounds.y,
     }
-  })
+  }
+
+  const clampedDelta = clampGroupDelta(state, bounds, delta)
+
+  return updateTargetShapes(state, command.target, (shape) => ({
+    ...shape,
+    x: shape.x + clampedDelta.x,
+    y: shape.y + clampedDelta.y,
+  }))
 }
 
 export function applyRecolorCommand(
@@ -299,7 +352,7 @@ export function applyRecolorCommand(
 ): CanvasState {
   const style = colorStyles[command.color]
 
-  return updateTargetShape(state, command.target, (shape) => ({
+  return updateTargetShapes(state, command.target, (shape) => ({
     ...shape,
     fill: style.fill,
     stroke: style.stroke,
@@ -384,17 +437,19 @@ export function applyDeleteCommand(
   state: CanvasState,
   command: DeleteShapeCommand,
 ): CanvasState {
-  const targetShape = findTargetShape(state, command.target)
+  const targetShapes = findTargetShapes(state, command.target)
 
-  if (!targetShape) {
+  if (targetShapes.length === 0) {
     return state
   }
+
+  const targetIds = new Set(targetShapes.map((shape) => shape.id))
 
   return {
     ...state,
     future: [],
     history: [...state.history, takeSnapshot(state)],
     selectedId: undefined,
-    shapes: state.shapes.filter((shape) => shape.id !== targetShape.id),
+    shapes: state.shapes.filter((shape) => !targetIds.has(shape.id)),
   }
 }

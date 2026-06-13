@@ -51,7 +51,14 @@ const allowedPositions = new Set<CommandPosition>([
   'bottom-right',
 ])
 const allowedSizes = new Set<CommandSize>(['small', 'medium', 'large'])
-const allowedTargetModes = new Set(['selected', 'last', 'shape', 'position', 'any'])
+const allowedTargetModes = new Set([
+  'selected',
+  'last',
+  'shape',
+  'position',
+  'any',
+  'semantic',
+])
 const allowedMoveModes = new Set(['absolute', 'relative'])
 const allowedMoveDirections = new Set(['left', 'right', 'up', 'down'])
 const allowedResizeDirections = new Set(['larger', 'smaller'])
@@ -247,53 +254,118 @@ function normalizeTarget(value: unknown): CommandTarget | null {
     return null
   }
 
-  return {
+  const normalizedTarget: CommandTarget = {
     mode: value.mode as CommandTarget['mode'],
     id: typeof value.id === 'string' ? value.id : undefined,
     shape: value.shape as ShapeKind | undefined,
     position: value.position as CommandPosition | undefined,
     color: value.color as CommandColor | undefined,
+    groupId: normalizeSafeLabel(value.groupId, 48),
+    groupLabel: normalizeSafeLabel(value.groupLabel),
+    partLabel: normalizeSafeLabel(value.partLabel),
   }
+
+  if (
+    normalizedTarget.mode === 'semantic' &&
+    !normalizedTarget.id &&
+    !normalizedTarget.groupId &&
+    !normalizedTarget.groupLabel &&
+    !normalizedTarget.partLabel
+  ) {
+    return null
+  }
+
+  return normalizedTarget
 }
 
-function countTargetMatches(
+function getSemanticGroupKey(
+  object: CommandPlannerInput['canvas']['objects'][number],
+) {
+  return object.groupId ?? object.groupLabel ?? object.id
+}
+
+function matchesTargetObject(
+  object: CommandPlannerInput['canvas']['objects'][number],
   target: CommandTarget,
   canvas: CommandPlannerInput['canvas'],
 ) {
-  const matchesFilters = (object: CommandPlannerInput['canvas']['objects'][number]) => {
-    if (target.shape && object.type !== target.shape) {
-      return false
-    }
-
-    if (target.color && !matchesCommandColor(object.fill, target.color)) {
-      return false
-    }
-
-    if (target.position && !matchesTargetPosition(object, canvas, target.position)) {
-      return false
-    }
-
-    return true
+  if (target.id && object.id !== target.id) {
+    return false
   }
 
+  if (target.shape && object.type !== target.shape) {
+    return false
+  }
+
+  if (target.color && !matchesCommandColor(object.fill, target.color)) {
+    return false
+  }
+
+  if (target.position && !matchesTargetPosition(object, canvas, target.position)) {
+    return false
+  }
+
+  if (target.groupId && object.groupId !== target.groupId) {
+    return false
+  }
+
+  if (target.groupLabel && object.groupLabel !== target.groupLabel) {
+    return false
+  }
+
+  if (target.partLabel && object.partLabel !== target.partLabel) {
+    return false
+  }
+
+  return true
+}
+
+function getTargetMatchSummary(
+  target: CommandTarget,
+  canvas: CommandPlannerInput['canvas'],
+) {
   if (target.mode === 'selected') {
-    return canvas.selectedId &&
-      canvas.objects.some(
-        (object) => object.id === canvas.selectedId && matchesFilters(object),
-      )
-      ? 1
-      : 0
+    const selectedObject = canvas.objects.find((object) => object.id === canvas.selectedId)
+    const matchCount =
+      selectedObject && matchesTargetObject(selectedObject, target, canvas) ? 1 : 0
+
+    return {
+      matchCount,
+      semanticGroupCount: matchCount,
+    }
   }
 
   if (target.mode === 'last') {
-    return canvas.objects.length > 0 ? 1 : 0
+    const matchCount = canvas.objects.length > 0 ? 1 : 0
+
+    return {
+      matchCount,
+      semanticGroupCount: matchCount,
+    }
+  }
+
+  const matches = canvas.objects.filter((object) =>
+    matchesTargetObject(object, target, canvas),
+  )
+
+  if (target.mode === 'semantic') {
+    return {
+      matchCount: matches.length,
+      semanticGroupCount: new Set(matches.map(getSemanticGroupKey)).size,
+    }
   }
 
   if (target.mode === 'shape' || target.mode === 'position' || target.mode === 'any') {
-    return canvas.objects.filter(matchesFilters).length
+    return {
+      matchCount: matches.length,
+      semanticGroupCount: matches.length,
+    }
   }
 
-  return 0
+  return {
+    matchCount: 0,
+    semanticGroupCount: 0,
+  }
 }
 
 function validateSingleTarget(
@@ -309,12 +381,66 @@ function validateSingleTarget(
     } satisfies CommandPlannerResult
   }
 
-  const matchCount = countTargetMatches(target, options.canvas)
+  const { matchCount } = getTargetMatchSummary(target, options.canvas)
 
   if (matchCount !== 1) {
     return {
       status: 'invalid',
       reason: matchCount === 0 ? 'target-not-found' : 'ambiguous-target',
+      rawValue,
+    } satisfies CommandPlannerResult
+  }
+
+  return null
+}
+
+function validateTargetSelection(
+  target: CommandTarget,
+  rawValue: unknown,
+  options: ValidatorOptions,
+  config: { allowGroup: boolean },
+) {
+  if (!options.canvas) {
+    return {
+      status: 'invalid',
+      reason: 'missing-canvas-context',
+      rawValue,
+    } satisfies CommandPlannerResult
+  }
+
+  const { matchCount, semanticGroupCount } = getTargetMatchSummary(
+    target,
+    options.canvas,
+  )
+
+  if (matchCount === 0) {
+    return {
+      status: 'invalid',
+      reason: 'target-not-found',
+      rawValue,
+    } satisfies CommandPlannerResult
+  }
+
+  if (target.mode === 'semantic' && semanticGroupCount !== 1) {
+    return {
+      status: 'invalid',
+      reason: 'ambiguous-target',
+      rawValue,
+    } satisfies CommandPlannerResult
+  }
+
+  if (target.mode === 'semantic' && matchCount > 1 && !config.allowGroup) {
+    return {
+      status: 'invalid',
+      reason: 'ambiguous-target',
+      rawValue,
+    } satisfies CommandPlannerResult
+  }
+
+  if (target.mode !== 'semantic' && matchCount > 1) {
+    return {
+      status: 'invalid',
+      reason: 'ambiguous-target',
       rawValue,
     } satisfies CommandPlannerResult
   }
@@ -541,7 +667,9 @@ export function validatePlannedCommand(
       }
     }
 
-    const targetError = validateSingleTarget(target, rawValue, options)
+    const targetError = validateTargetSelection(target, rawValue, options, {
+      allowGroup: target.mode === 'semantic' && !target.id,
+    })
 
     if (targetError) {
       return targetError
@@ -610,7 +738,9 @@ export function validatePlannedCommand(
       }
     }
 
-    const targetError = validateSingleTarget(target, rawValue, options)
+    const targetError = validateTargetSelection(target, rawValue, options, {
+      allowGroup: target.mode === 'semantic' && !target.id,
+    })
 
     if (targetError) {
       return targetError
@@ -671,7 +801,9 @@ export function validatePlannedCommand(
       }
     }
 
-    const targetError = validateSingleTarget(target, rawValue, options)
+    const targetError = validateTargetSelection(target, rawValue, options, {
+      allowGroup: target.mode === 'semantic' && !target.id,
+    })
 
     if (targetError) {
       return targetError

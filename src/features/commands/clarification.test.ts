@@ -72,6 +72,49 @@ describe('clarification', () => {
     })
   })
 
+  it('uses structured candidate targets when clarifying semantic groups', () => {
+    const pending = createPendingClarification(
+      {
+        action: 'delete',
+        target: {
+          mode: 'semantic',
+          groupLabel: '树',
+        },
+        sourceText: '删除树',
+      },
+      [
+        {
+          id: 'tree-1',
+          label: '左侧的树（2个部件）',
+          target: {
+            mode: 'semantic',
+            groupId: 'tree-1',
+            groupLabel: '树',
+          },
+        },
+        {
+          id: 'tree-2',
+          label: '右侧的树（2个部件）',
+          target: {
+            mode: 'semantic',
+            groupId: 'tree-2',
+            groupLabel: '树',
+          },
+        },
+      ],
+      '删除树',
+    )
+
+    expect(resolveClarificationResponse('第二个', pending!)).toMatchObject({
+      action: 'delete',
+      target: {
+        mode: 'semantic',
+        groupId: 'tree-2',
+        groupLabel: '树',
+      },
+    })
+  })
+
   it('uses target filters to clarify a pending command', () => {
     const pending = createPendingClarification(
       moveYellowCircleCommand,

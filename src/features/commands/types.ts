@@ -69,11 +69,14 @@ export type CreateShapeCommand = {
 }
 
 export type CommandTarget = {
-  mode: 'selected' | 'last' | 'shape' | 'position' | 'any'
+  mode: 'selected' | 'last' | 'shape' | 'position' | 'any' | 'semantic'
   id?: string
   shape?: ShapeKind
   position?: CommandPosition
   color?: CommandColor
+  groupId?: string
+  groupLabel?: string
+  partLabel?: string
 }
 
 export type MoveShapeCommand = {

@@ -7,12 +7,13 @@ import type {
 import { colorLabels, positionLabels, shapeLabels } from '../commands/commandLabels'
 import { describeSceneElement } from '../commands/scenePlan'
 import { colorStyles } from './colorStyles'
-import { matchesTargetPosition, resolveTargetShape } from './targetMatching'
+import { matchesTargetPosition, resolveTargetSelection } from './targetMatching'
 import type { CanvasState, ShapeObject } from './types'
 
 export type TargetCandidate = {
   id: string
   label: string
+  target?: CommandTarget
 }
 
 export type TargetFeedback =
@@ -44,6 +45,34 @@ function describeShapePosition(shape: ShapeObject, canvas: CanvasState) {
     .filter((item) => item.matches)
 
   return positionLabels[rankedPositions[0]?.position ?? 'center']
+}
+
+function describeBoundsPosition(
+  bounds: Pick<ShapeObject, 'x' | 'y' | 'width' | 'height'>,
+  canvas: CanvasState,
+) {
+  const rankedPositions = (Object.keys(positionLabels) as CommandPosition[])
+    .map((position) => ({
+      position,
+      matches: matchesTargetPosition(bounds, canvas, position),
+    }))
+    .filter((item) => item.matches)
+
+  return positionLabels[rankedPositions[0]?.position ?? 'center']
+}
+
+function getShapesBounds(shapes: ShapeObject[]) {
+  const minX = Math.min(...shapes.map((shape) => shape.x))
+  const minY = Math.min(...shapes.map((shape) => shape.y))
+  const maxX = Math.max(...shapes.map((shape) => shape.x + shape.width))
+  const maxY = Math.max(...shapes.map((shape) => shape.y + shape.height))
+
+  return {
+    x: minX,
+    y: minY,
+    width: maxX - minX,
+    height: maxY - minY,
+  }
 }
 
 function describeShape(shape: ShapeObject, canvas: CanvasState) {
@@ -79,6 +108,14 @@ function describeShape(shape: ShapeObject, canvas: CanvasState) {
 }
 
 function describeTarget(target: CommandTarget) {
+  if (target.mode === 'semantic') {
+    if (target.groupLabel && target.partLabel) {
+      return `${target.groupLabel}的${target.partLabel}`
+    }
+
+    return target.partLabel ?? target.groupLabel ?? target.groupId ?? '语义目标'
+  }
+
   const parts = [
     target.position ? positionLabels[target.position] : undefined,
     target.color ? colorLabels[target.color] : undefined,
@@ -86,6 +123,73 @@ function describeTarget(target: CommandTarget) {
   ].filter(Boolean)
 
   return parts.join('')
+}
+
+function createSemanticGroupCandidates(
+  matches: ShapeObject[],
+  canvasState: CanvasState,
+  target: CommandTarget,
+) {
+  const groups = new Map<string, ShapeObject[]>()
+
+  matches.forEach((shape) => {
+    const groupKey = shape.groupId ?? shape.groupLabel ?? shape.id
+    const candidateKey = target.partLabel
+      ? `${groupKey}:${shape.partLabel ?? shape.id}`
+      : groupKey
+    const groupShapes = groups.get(candidateKey) ?? []
+    groupShapes.push(shape)
+    groups.set(candidateKey, groupShapes)
+  })
+
+  return Array.from(groups.entries()).map(([candidateKey, groupShapes], index) => {
+    const representative = groupShapes[0]
+    const bounds = getShapesBounds(groupShapes)
+    const selectedText = groupShapes.some((shape) => shape.id === canvasState.selectedId)
+      ? '当前选中的'
+      : ''
+    const label =
+      representative.groupLabel && target.partLabel
+        ? `${representative.groupLabel}的${target.partLabel}`
+        : representative.groupLabel ?? describeShape(representative, canvasState)
+
+    return {
+      id: candidateKey || `semantic-group-${index}`,
+      label: `${selectedText}${describeBoundsPosition(bounds, canvasState)}的${label}（${
+        groupShapes.length
+      }个部件）`,
+      target: {
+        ...target,
+        mode: 'semantic',
+        groupId: representative.groupId,
+        groupLabel: representative.groupLabel,
+        partLabel: target.partLabel,
+        id: undefined,
+      },
+    } satisfies TargetCandidate
+  })
+}
+
+function createTargetCandidates(
+  matches: ShapeObject[],
+  canvasState: CanvasState,
+  target: CommandTarget,
+) {
+  if (target.mode === 'semantic' && !target.id) {
+    return createSemanticGroupCandidates(matches, canvasState, target)
+  }
+
+  return matches.map((shape) => ({
+    id: shape.id,
+    label: describeShape(shape, canvasState),
+  }))
+}
+
+function createShapeCandidates(matches: ShapeObject[], canvasState: CanvasState) {
+  return matches.map((shape) => ({
+    id: shape.id,
+    label: describeShape(shape, canvasState),
+  }))
 }
 
 export function createTargetFeedback(
@@ -98,9 +202,19 @@ export function createTargetFeedback(
     }
   }
 
-  const result = resolveTargetShape(canvasState, command.target)
+  const result = resolveTargetSelection(canvasState, command.target)
 
   if (result.status === 'matched') {
+    if (command.action === 'resize' && result.shapes.length !== 1) {
+      const targetText = describeTarget(command.target)
+
+      return {
+        status: 'ambiguous',
+        message: `${targetText}包含 ${result.shapes.length} 个部件，当前请先说明要缩放的具体部件。`,
+        candidates: createShapeCandidates(result.shapes, canvasState),
+      }
+    }
+
     return {
       status: 'ok',
     }
@@ -115,14 +229,11 @@ export function createTargetFeedback(
     }
   }
 
-  const candidates = result.matches.map((shape) => ({
-    id: shape.id,
-    label: describeShape(shape, canvasState),
-  }))
+  const candidates = createTargetCandidates(result.matches, canvasState, command.target)
 
   return {
     status: 'ambiguous',
-    message: `找到 ${result.matches.length} 个匹配的${targetText}，请说得更具体一些。`,
+    message: `找到 ${candidates.length} 个匹配的${targetText}，请说得更具体一些。`,
     candidates,
   }
 }

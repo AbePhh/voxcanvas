@@ -29,6 +29,21 @@ export type TargetMatchResult =
       matches: ShapeObject[]
     }
 
+export type TargetSelectionResult =
+  | {
+      status: 'matched'
+      shapes: ShapeObject[]
+      matches: ShapeObject[]
+    }
+  | {
+      status: 'missing'
+      matches: ShapeObject[]
+    }
+  | {
+      status: 'ambiguous'
+      matches: ShapeObject[]
+    }
+
 export function matchesTargetPosition(
   shape: Pick<ShapeObject, 'x' | 'y' | 'width' | 'height'>,
   canvas: Pick<CanvasState, 'width' | 'height'>,
@@ -69,13 +84,116 @@ export function matchesTargetFilters(
     return false
   }
 
+  if (target.groupId && shape.groupId !== target.groupId) {
+    return false
+  }
+
+  if (target.groupLabel && shape.groupLabel !== target.groupLabel) {
+    return false
+  }
+
+  if (target.partLabel && shape.partLabel !== target.partLabel) {
+    return false
+  }
+
   return true
+}
+
+function resolveSemanticSelection(
+  state: CanvasState,
+  target: CommandTarget,
+): TargetSelectionResult {
+  const matchedShapes = state.shapes.filter((shape) =>
+    matchesTargetFilters(shape, target, state),
+  )
+
+  if (matchedShapes.length === 0) {
+    return {
+      status: 'missing',
+      matches: [],
+    }
+  }
+
+  if (target.id) {
+    return matchedShapes.length === 1
+      ? {
+          status: 'matched',
+          shapes: matchedShapes,
+          matches: matchedShapes,
+        }
+      : {
+          status: 'ambiguous',
+          matches: matchedShapes,
+        }
+  }
+
+  const groupKeys = new Set(
+    matchedShapes.map((shape) => {
+      const groupKey = shape.groupId ?? shape.groupLabel ?? shape.id
+      const partKey = target.partLabel ? shape.partLabel ?? shape.id : ''
+
+      return `${groupKey}:${partKey}`
+    }),
+  )
+
+  if (groupKeys.size !== 1) {
+    return {
+      status: 'ambiguous',
+      matches: matchedShapes,
+    }
+  }
+
+  return {
+    status: 'matched',
+    shapes: matchedShapes,
+    matches: matchedShapes,
+  }
+}
+
+export function resolveTargetSelection(
+  state: CanvasState,
+  target: CommandTarget,
+): TargetSelectionResult {
+  if (target.mode === 'semantic') {
+    return resolveSemanticSelection(state, target)
+  }
+
+  const result = resolveTargetShape(state, target)
+
+  if (result.status !== 'matched') {
+    return result
+  }
+
+  return {
+    status: 'matched',
+    shapes: [result.shape],
+    matches: result.matches,
+  }
 }
 
 export function resolveTargetShape(
   state: CanvasState,
   target: CommandTarget,
 ): TargetMatchResult {
+  if (target.mode === 'semantic') {
+    const result = resolveSemanticSelection(state, target)
+
+    if (result.status !== 'matched') {
+      return result
+    }
+
+    return result.shapes.length === 1
+      ? {
+          status: 'matched',
+          shape: result.shapes[0],
+          matches: result.matches,
+        }
+      : {
+          status: 'ambiguous',
+          matches: result.matches,
+        }
+  }
+
   const reversedMatches = [...state.shapes]
     .reverse()
     .filter((shape) => matchesTargetFilters(shape, target, state))

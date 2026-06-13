@@ -169,6 +169,153 @@ describe('createTargetFeedback', () => {
     })
   })
 
+  it('treats one semantic group with multiple parts as a valid target', () => {
+    const canvas: CanvasState = {
+      ...baseCanvas,
+      shapes: [
+        {
+          id: 'tree-trunk',
+          type: 'rect',
+          x: 680,
+          y: 330,
+          width: 50,
+          height: 150,
+          fill: '#f97316',
+          stroke: '#9a3412',
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树干',
+        },
+        {
+          id: 'tree-top',
+          type: 'circle',
+          x: 630,
+          y: 230,
+          width: 150,
+          height: 150,
+          fill: '#22c55e',
+          stroke: '#166534',
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树冠',
+        },
+      ],
+    }
+
+    expect(
+      createTargetFeedback(
+        {
+          action: 'move',
+          target: {
+            mode: 'semantic',
+            groupLabel: '树',
+          },
+          mode: 'relative',
+          direction: 'right',
+          distance: 48,
+          sourceText: '把树往右移动一点',
+        },
+        canvas,
+      ),
+    ).toEqual({ status: 'ok' })
+  })
+
+  it('creates group-level candidates when a semantic target is ambiguous', () => {
+    const canvas: CanvasState = {
+      ...baseCanvas,
+      shapes: [
+        {
+          id: 'left-tree-trunk',
+          type: 'rect',
+          x: 120,
+          y: 330,
+          width: 50,
+          height: 150,
+          fill: '#f97316',
+          stroke: '#9a3412',
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树干',
+        },
+        {
+          id: 'left-tree-top',
+          type: 'circle',
+          x: 80,
+          y: 230,
+          width: 150,
+          height: 150,
+          fill: '#22c55e',
+          stroke: '#166534',
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树冠',
+        },
+        {
+          id: 'right-tree-trunk',
+          type: 'rect',
+          x: 720,
+          y: 330,
+          width: 50,
+          height: 150,
+          fill: '#f97316',
+          stroke: '#9a3412',
+          groupId: 'tree-2',
+          groupLabel: '树',
+          partLabel: '树干',
+        },
+        {
+          id: 'right-tree-top',
+          type: 'circle',
+          x: 680,
+          y: 230,
+          width: 150,
+          height: 150,
+          fill: '#22c55e',
+          stroke: '#166534',
+          groupId: 'tree-2',
+          groupLabel: '树',
+          partLabel: '树冠',
+        },
+      ],
+    }
+
+    expect(
+      createTargetFeedback(
+        {
+          action: 'delete',
+          target: {
+            mode: 'semantic',
+            groupLabel: '树',
+          },
+          sourceText: '删除树',
+        },
+        canvas,
+      ),
+    ).toMatchObject({
+      status: 'ambiguous',
+      candidates: [
+        {
+          id: 'tree-1',
+          label: '左侧的树（2个部件）',
+          target: {
+            mode: 'semantic',
+            groupId: 'tree-1',
+            groupLabel: '树',
+          },
+        },
+        {
+          id: 'tree-2',
+          label: '右侧的树（2个部件）',
+          target: {
+            mode: 'semantic',
+            groupId: 'tree-2',
+            groupLabel: '树',
+          },
+        },
+      ],
+    })
+  })
+
   it('explains when no target matches', () => {
     expect(
       createTargetFeedback(
