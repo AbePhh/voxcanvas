@@ -139,12 +139,22 @@
 }
 
 .object-name {
+  display: grid;
+  gap: 2px;
   overflow: hidden;
   color: #111827;
   font-size: 14px;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.object-group {
+  overflow: hidden;
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 700;
+  text-overflow: ellipsis;
 }
 
 .object-type {

@@ -38,6 +38,27 @@ const plannerRequestSchema = z.object({
     width: z.number(),
     height: z.number(),
     selectedId: z.string().optional(),
+    selectedGroupId: z.string().optional(),
+    semanticGroups: z
+      .array(
+        z.object({
+          id: z.string(),
+          groupId: z.string().optional(),
+          groupLabel: z.string(),
+          displayLabel: z.string(),
+          referenceLabels: z.array(z.string()),
+          partLabels: z.array(z.string()),
+          objectIds: z.array(z.string()),
+          bounds: z.object({
+            x: z.number(),
+            y: z.number(),
+            width: z.number(),
+            height: z.number(),
+          }),
+          selected: z.boolean(),
+        }),
+      )
+      .optional(),
     objects: z.array(
       z.object({
         id: z.string(),
@@ -88,6 +109,7 @@ function buildPlannerPrompt(input) {
     'Targets may include filters: { mode, id?, shape?, color?, position?, groupId?, groupLabel?, partLabel? }.',
     'Use target mode "semantic" when editing AI-generated scene graph objects or parts by their labels.',
     'Semantic target examples: { mode: "semantic", groupLabel: "房子" } edits the whole house group; { mode: "semantic", groupLabel: "房子", partLabel: "屋顶" } edits only the roof.',
+    'Canvas context includes semanticGroups. When the user refers to a displayed duplicate label, ordinal phrase, or reference label such as "树 2", "第二棵树", or "tree-2", copy that groupId into the target.',
     'Resize may target one concrete object, one semantic part, or one unique semantic group. If multiple semantic groups share the same label, include groupId or return unknown so the UI can clarify.',
     '',
     'Rules:',
@@ -96,10 +118,12 @@ function buildPlannerPrompt(input) {
     '- Preserve the original user text in sourceText. Do not rewrite sourceText.',
     '- Use the local parser result as a hint, not as authority. If it is unsafe, incomplete, or clearly caused by noisy speech, normalize to the best supported command.',
     '- If the user intent is unclear, ambiguous, unsafe, or unsupported, return { "action": "unknown", "reason": "unsupported-action", "sourceText": original text }.',
+    '- If the user edits a scene object and one semanticGroups entry clearly matches their wording, include its groupId in the semantic target. If several entries still match and none is selected, return a semantic target without groupId so the UI can ask for clarification.',
     '- For complex multi-object scene requests, prefer action "scene" instead of forcing the request into a single create command.',
     '- A scene must be decomposed into editable primitive elements. Do not output bitmap images, SVG strings, paths, CSS, external assets, or template names.',
     '- Scene elements must use normalized bbox coordinates inside sceneSpace. bbox uses top-left origin: { x, y, width, height }.',
     '- Preserve semantic grouping with groupId, groupLabel, and partLabel. Example: a house may have wall, roof, and door elements sharing groupId "house-1".',
+    '- When adding new scene objects to an existing canvas, do not reuse any existing canvas object groupId. Use a new groupId such as "tree-2" for a second tree. If modifying an existing object, return an edit command with a semantic target instead of a scene command.',
     '- Use zIndex for layering; higher zIndex appears above lower zIndex.',
     '- Keep scene elements visually balanced and inside sceneSpace. Do not exceed sceneCapabilities.maxElements.',
     '- Scene output should be complete, recognizable, and editable. Complex scenes should not collapse into one element unless the user truly requested one simple object.',

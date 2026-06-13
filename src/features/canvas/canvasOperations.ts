@@ -41,6 +41,7 @@ function takeSnapshot(state: CanvasState): CanvasSnapshot {
     height: state.height,
     shapes: state.shapes,
     selectedId: state.selectedId,
+    selectedGroupId: state.selectedGroupId,
   }
 }
 
@@ -51,7 +52,12 @@ function restoreSnapshot(state: CanvasState, snapshot: CanvasSnapshot): CanvasSt
     height: snapshot.height,
     shapes: snapshot.shapes,
     selectedId: snapshot.selectedId,
+    selectedGroupId: snapshot.selectedGroupId,
   }
+}
+
+function getLastSceneGroupId(shapes: ShapeObject[]) {
+  return [...shapes].reverse().find((shape) => shape.groupId)?.groupId
 }
 
 function clampCanvasDimension(value: number) {
@@ -120,6 +126,14 @@ function findTargetShapes(state: CanvasState, target: CommandTarget) {
   return result.status === 'matched' ? result.shapes : []
 }
 
+function getSharedGroupId(shapes: ShapeObject[]) {
+  const groupIds = new Set(
+    shapes.flatMap((shape) => (shape.groupId ? [shape.groupId] : [])),
+  )
+
+  return groupIds.size === 1 ? Array.from(groupIds)[0] : undefined
+}
+
 function updateTargetShapes(
   state: CanvasState,
   target: CommandTarget,
@@ -138,6 +152,10 @@ function updateTargetShapes(
     future: [],
     history: [...state.history, takeSnapshot(state)],
     selectedId: targetShapes.at(-1)?.id,
+    selectedGroupId:
+      targetShapes.length > 1 || target.mode === 'semantic'
+        ? getSharedGroupId(targetShapes)
+        : undefined,
     shapes: state.shapes.map((shape) =>
       targetIds.has(shape.id) ? updateShape(shape, targetShapes) : shape,
     ),
@@ -254,6 +272,7 @@ export function applyCreateCommand(
     future: [],
     history: [...state.history, takeSnapshot(state)],
     selectedId: shape.id,
+    selectedGroupId: undefined,
     shapes: [...state.shapes, shape],
   }
 }
@@ -273,6 +292,7 @@ export function applySceneCommand(
     future: [],
     history: [...state.history, takeSnapshot(state)],
     selectedId: shapes.at(-1)?.id,
+    selectedGroupId: getLastSceneGroupId(shapes),
     shapes: [...state.shapes, ...shapes],
   }
 }
@@ -287,6 +307,7 @@ export function applyClearCommand(state: CanvasState): CanvasState {
     future: [],
     history: [...state.history, takeSnapshot(state)],
     selectedId: undefined,
+    selectedGroupId: undefined,
     shapes: [],
   }
 }
@@ -482,6 +503,7 @@ export function applyDeleteCommand(
     future: [],
     history: [...state.history, takeSnapshot(state)],
     selectedId: undefined,
+    selectedGroupId: undefined,
     shapes: state.shapes.filter((shape) => !targetIds.has(shape.id)),
   }
 }

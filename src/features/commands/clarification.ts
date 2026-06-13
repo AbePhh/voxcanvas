@@ -37,15 +37,15 @@ function findDictionaryMatch<T extends string>(
 }
 
 function detectCandidateIndex(text: string) {
-  if (includesAny(text, ['第一个', '第一项', '一号', '1号'])) {
+  if (includesAny(text, ['第一个', '第一项', '第一棵', '第一个树', '一号', '1号'])) {
     return 0
   }
 
-  if (includesAny(text, ['第二个', '第二项', '二号', '2号'])) {
+  if (includesAny(text, ['第二个', '第二项', '第二棵', '第二个树', '二号', '2号'])) {
     return 1
   }
 
-  if (includesAny(text, ['第三个', '第三项', '三号', '3号'])) {
+  if (includesAny(text, ['第三个', '第三项', '第三棵', '第三个树', '三号', '3号'])) {
     return 2
   }
 

@@ -621,7 +621,7 @@ describe('validatePlannedCommand', () => {
     })
   })
 
-  it('rejects ambiguous semantic scene targets', () => {
+  it('allows ambiguous semantic scene targets so the UI can clarify them', () => {
     expect(
       validatePlannedCommand(
         {
@@ -661,8 +661,145 @@ describe('validatePlannedCommand', () => {
         },
       ),
     ).toMatchObject({
-      status: 'invalid',
-      reason: 'ambiguous-target',
+      status: 'planned',
+      command: {
+        action: 'delete',
+        target: {
+          mode: 'semantic',
+          groupLabel: '树',
+        },
+      },
+    })
+  })
+
+  it('accepts the selected semantic group when labels are duplicated', () => {
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'recolor',
+          target: { mode: 'semantic', groupLabel: '树' },
+          color: 'red',
+        },
+        {
+          canvas: {
+            ...canvasWithOneCircle,
+            selectedGroupId: 'tree-2',
+            objects: [
+              {
+                id: 'tree-1-top',
+                type: 'circle',
+                x: 100,
+                y: 100,
+                width: 80,
+                height: 80,
+                fill: '#22c55e',
+                text: undefined,
+                groupId: 'tree-1',
+                groupLabel: '树',
+              },
+              {
+                id: 'tree-2-top',
+                type: 'circle',
+                x: 300,
+                y: 100,
+                width: 80,
+                height: 80,
+                fill: '#22c55e',
+                text: undefined,
+                groupId: 'tree-2',
+                groupLabel: '树',
+              },
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({
+      status: 'planned',
+      command: {
+        action: 'recolor',
+        target: {
+          mode: 'semantic',
+          groupLabel: '树',
+        },
+      },
+    })
+  })
+
+  it('normalizes duplicate semantic reference labels to group ids', () => {
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'move',
+          target: { mode: 'semantic', groupLabel: '树 2' },
+          mode: 'relative',
+          direction: 'right',
+        },
+        {
+          canvas: {
+            ...canvasWithOneCircle,
+            semanticGroups: [
+              {
+                id: 'tree-1',
+                groupId: 'tree-1',
+                groupLabel: '树',
+                displayLabel: '树 1',
+                referenceLabels: ['tree-1', '树 1', '第一棵树'],
+                partLabels: ['树冠'],
+                objectIds: ['tree-1-top'],
+                bounds: { x: 100, y: 100, width: 80, height: 80 },
+                selected: false,
+              },
+              {
+                id: 'tree-2',
+                groupId: 'tree-2',
+                groupLabel: '树',
+                displayLabel: '树 2',
+                referenceLabels: ['tree-2', '树 2', '第二棵树'],
+                partLabels: ['树冠'],
+                objectIds: ['tree-2-top'],
+                bounds: { x: 300, y: 100, width: 80, height: 80 },
+                selected: false,
+              },
+            ],
+            objects: [
+              {
+                id: 'tree-1-top',
+                type: 'circle',
+                x: 100,
+                y: 100,
+                width: 80,
+                height: 80,
+                fill: '#22c55e',
+                text: undefined,
+                groupId: 'tree-1',
+                groupLabel: '树',
+              },
+              {
+                id: 'tree-2-top',
+                type: 'circle',
+                x: 300,
+                y: 100,
+                width: 80,
+                height: 80,
+                fill: '#22c55e',
+                text: undefined,
+                groupId: 'tree-2',
+                groupLabel: '树',
+              },
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({
+      status: 'planned',
+      command: {
+        action: 'move',
+        target: {
+          mode: 'semantic',
+          groupId: 'tree-2',
+          groupLabel: '树',
+        },
+      },
     })
   })
 })
@@ -723,6 +860,8 @@ describe('createPlannerInput', () => {
         width: 960,
         height: 560,
         selectedId: 'circle-1',
+        selectedGroupId: undefined,
+        semanticGroups: [],
         objects: [
           {
             id: 'circle-1',

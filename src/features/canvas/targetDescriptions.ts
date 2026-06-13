@@ -152,10 +152,11 @@ function createSemanticGroupCandidates(
       representative.groupLabel && target.partLabel
         ? `${representative.groupLabel}的${target.partLabel}`
         : representative.groupLabel ?? describeShape(representative, canvasState)
+    const groupIdentity = representative.groupId ? `${representative.groupId}，` : ''
 
     return {
       id: candidateKey || `semantic-group-${index}`,
-      label: `${selectedText}${describeBoundsPosition(bounds, canvasState)}的${label}（${
+      label: `${selectedText}${describeBoundsPosition(bounds, canvasState)}的${label}（${groupIdentity}${
         groupShapes.length
       }个部件）`,
       target: {
@@ -175,7 +176,11 @@ function createTargetCandidates(
   canvasState: CanvasState,
   target: CommandTarget,
 ) {
-  if (target.mode === 'semantic' && !target.id) {
+  if (
+    target.mode === 'semantic' &&
+    !target.id &&
+    matches.some((shape) => shape.groupId || shape.groupLabel)
+  ) {
     return createSemanticGroupCandidates(matches, canvasState, target)
   }
 

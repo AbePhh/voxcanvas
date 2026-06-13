@@ -278,6 +278,51 @@ function normalizeTarget(value: unknown): CommandTarget | null {
   return normalizedTarget
 }
 
+function normalizeReferenceLabel(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/[，。！？、,.!?（）()【】[\]{}"'“”‘’]/g, '')
+    .trim()
+}
+
+function normalizeSemanticTargetReference(
+  target: CommandTarget,
+  canvas?: CommandPlannerInput['canvas'],
+) {
+  if (
+    !canvas ||
+    target.mode !== 'semantic' ||
+    target.groupId ||
+    !target.groupLabel
+  ) {
+    return target
+  }
+
+  const normalizedReference = normalizeReferenceLabel(target.groupLabel)
+  const matchingGroups = (canvas.semanticGroups ?? []).filter((group) =>
+    group.referenceLabels.some(
+      (referenceLabel) =>
+        normalizeReferenceLabel(referenceLabel) === normalizedReference,
+    ),
+  )
+  const selectedMatch = matchingGroups.find(
+    (group) => group.groupId && group.groupId === canvas.selectedGroupId,
+  )
+  const matchedGroup =
+    selectedMatch ?? (matchingGroups.length === 1 ? matchingGroups[0] : null)
+
+  if (!matchedGroup?.groupId) {
+    return target
+  }
+
+  return {
+    ...target,
+    groupId: matchedGroup.groupId,
+    groupLabel: matchedGroup.groupLabel,
+  }
+}
+
 function getSemanticGroupKey(
   object: CommandPlannerInput['canvas']['objects'][number],
 ) {
@@ -349,6 +394,19 @@ function getTargetMatchSummary(
   )
 
   if (target.mode === 'semantic') {
+    if (!target.groupId && canvas.selectedGroupId) {
+      const selectedGroupMatches = matches.filter(
+        (object) => object.groupId === canvas.selectedGroupId,
+      )
+
+      if (selectedGroupMatches.length > 0) {
+        return {
+          matchCount: selectedGroupMatches.length,
+          semanticGroupCount: 1,
+        }
+      }
+    }
+
     return {
       matchCount: matches.length,
       semanticGroupCount: new Set(matches.map(getSemanticGroupKey)).size,
@@ -374,6 +432,8 @@ function validateTargetSelection(
   options: ValidatorOptions,
   config: { allowGroup: boolean },
 ) {
+  const normalizedTarget = normalizeSemanticTargetReference(target, options.canvas)
+
   if (!options.canvas) {
     return {
       status: 'invalid',
@@ -383,7 +443,7 @@ function validateTargetSelection(
   }
 
   const { matchCount, semanticGroupCount } = getTargetMatchSummary(
-    target,
+    normalizedTarget,
     options.canvas,
   )
 
@@ -395,7 +455,11 @@ function validateTargetSelection(
     } satisfies CommandPlannerResult
   }
 
-  if (target.mode === 'semantic' && semanticGroupCount !== 1) {
+  if (normalizedTarget.mode === 'semantic' && semanticGroupCount !== 1) {
+    return null
+  }
+
+  if (normalizedTarget.mode === 'semantic' && matchCount > 1 && !config.allowGroup) {
     return {
       status: 'invalid',
       reason: 'ambiguous-target',
@@ -403,15 +467,7 @@ function validateTargetSelection(
     } satisfies CommandPlannerResult
   }
 
-  if (target.mode === 'semantic' && matchCount > 1 && !config.allowGroup) {
-    return {
-      status: 'invalid',
-      reason: 'ambiguous-target',
-      rawValue,
-    } satisfies CommandPlannerResult
-  }
-
-  if (target.mode !== 'semantic' && matchCount > 1) {
+  if (normalizedTarget.mode !== 'semantic' && matchCount > 1) {
     return {
       status: 'invalid',
       reason: 'ambiguous-target',
@@ -420,6 +476,13 @@ function validateTargetSelection(
   }
 
   return null
+}
+
+function normalizeEditableTarget(
+  target: CommandTarget,
+  options: ValidatorOptions,
+) {
+  return normalizeSemanticTargetReference(target, options.canvas)
 }
 
 export function validatePlannedCommand(
@@ -671,7 +734,7 @@ export function validatePlannedCommand(
         source: 'ai',
         command: {
           action: 'move',
-          target,
+          target: normalizeEditableTarget(target, options),
           mode: 'absolute',
           position: rawValue.position as CommandPosition,
           sourceText,
@@ -692,7 +755,7 @@ export function validatePlannedCommand(
       source: 'ai',
       command: {
         action: 'move',
-        target,
+        target: normalizeEditableTarget(target, options),
         mode: 'relative',
         direction: rawValue.direction as 'left' | 'right' | 'up' | 'down',
         distance: typeof rawValue.distance === 'number' ? rawValue.distance : 48,
@@ -725,7 +788,7 @@ export function validatePlannedCommand(
       source: 'ai',
       command: {
         action: 'recolor',
-        target,
+        target: normalizeEditableTarget(target, options),
         color: rawValue.color as CommandColor,
         sourceText,
       },
@@ -759,7 +822,7 @@ export function validatePlannedCommand(
       source: 'ai',
       command: {
         action: 'resize',
-        target,
+        target: normalizeEditableTarget(target, options),
         direction: rawValue.direction as 'larger' | 'smaller',
         sourceText,
       },
@@ -790,7 +853,7 @@ export function validatePlannedCommand(
       source: 'ai',
       command: {
         action: 'delete',
-        target,
+        target: normalizeEditableTarget(target, options),
         sourceText,
       },
     }

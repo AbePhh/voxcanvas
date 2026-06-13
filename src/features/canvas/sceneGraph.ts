@@ -29,6 +29,90 @@ function createSceneShapeId(element: SceneElement) {
   return `scene-${safeId}-${Math.random().toString(36).slice(2, 7)}`
 }
 
+function normalizeGroupId(value: string | undefined) {
+  if (!value) {
+    return undefined
+  }
+
+  const normalized = value
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 40)
+
+  return normalized || undefined
+}
+
+function getGroupIdPrefix(groupId: string) {
+  return groupId.replace(/-\d+$/, '') || groupId
+}
+
+function createUniqueGroupId(preferredGroupId: string | undefined, usedGroupIds: Set<string>) {
+  const normalizedGroupId = normalizeGroupId(preferredGroupId)
+
+  if (normalizedGroupId && !usedGroupIds.has(normalizedGroupId)) {
+    usedGroupIds.add(normalizedGroupId)
+    return normalizedGroupId
+  }
+
+  const prefix = normalizedGroupId ? getGroupIdPrefix(normalizedGroupId) : 'scene-group'
+  let index = normalizedGroupId?.match(/-(\d+)$/)
+    ? Number(normalizedGroupId.match(/-(\d+)$/)?.[1]) + 1
+    : 1
+  let candidate = `${prefix}-${index}`
+
+  while (usedGroupIds.has(candidate)) {
+    index += 1
+    candidate = `${prefix}-${index}`
+  }
+
+  usedGroupIds.add(candidate)
+  return candidate
+}
+
+function getSceneElementGroupKey(element: SceneElement) {
+  return element.groupId ?? element.groupLabel ?? element.partLabel ?? element.id
+}
+
+function hasSemanticSceneMetadata(element: SceneElement) {
+  return Boolean(element.groupId || element.groupLabel || element.partLabel)
+}
+
+function assignSceneGroupIds(
+  elements: SceneElement[],
+  canvas: Pick<CanvasState, 'shapes'>,
+) {
+  const usedGroupIds = new Set(
+    canvas.shapes.flatMap((shape) => (shape.groupId ? [shape.groupId] : [])),
+  )
+  const groupIdBySourceKey = new Map<string, string>()
+
+  return elements.map((element) => {
+    if (!hasSemanticSceneMetadata(element)) {
+      return element
+    }
+
+    const sourceGroupKey = getSceneElementGroupKey(element)
+    const existingGroupId = groupIdBySourceKey.get(sourceGroupKey)
+
+    if (existingGroupId) {
+      return {
+        ...element,
+        groupId: existingGroupId,
+      }
+    }
+
+    const nextGroupId = createUniqueGroupId(element.groupId, usedGroupIds)
+    groupIdBySourceKey.set(sourceGroupKey, nextGroupId)
+
+    return {
+      ...element,
+      groupId: nextGroupId,
+    }
+  })
+}
+
 function getSceneBounds(elements: SceneElement[]) {
   const minX = Math.min(...elements.map((element) => element.bbox.x))
   const minY = Math.min(...elements.map((element) => element.bbox.y))
@@ -109,10 +193,11 @@ export function normalizeSceneElements(
 
 export function createShapesFromSceneCommand(
   command: SceneCommand,
-  canvas: Pick<CanvasState, 'width' | 'height'>,
+  canvas: Pick<CanvasState, 'width' | 'height' | 'shapes'>,
 ): ShapeObject[] {
   const sceneSpace = getSceneSpace(canvas)
-  const normalizedElements = normalizeSceneElements(command.elements, sceneSpace)
+  const elementsWithUniqueGroups = assignSceneGroupIds(command.elements, canvas)
+  const normalizedElements = normalizeSceneElements(elementsWithUniqueGroups, sceneSpace)
   const scaleX = canvas.width / sceneSpace.width
   const scaleY = canvas.height / sceneSpace.height
 

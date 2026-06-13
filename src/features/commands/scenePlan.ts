@@ -1,4 +1,5 @@
 import { colorStyles } from '../canvas/colorStyles'
+import { createSemanticGroupSummaries } from '../canvas/semanticGroups'
 import type { CanvasState, ShapeObject } from '../canvas/types'
 import { colorLabels, shapeLabels } from './commandLabels'
 import type { CommandColor, SceneCommand, SceneElement } from './types'
@@ -16,6 +17,8 @@ export type ScenePlanElementSummary = {
 export type ScenePlanGroupSummary = {
   id: string
   label: string
+  referenceLabels?: string[]
+  selected?: boolean
   elements: ScenePlanElementSummary[]
 }
 
@@ -235,10 +238,27 @@ function summarizeShape(
 export function createScenePlanSummary(command: SceneCommand): ScenePlanSummary {
   const groups = new Map<string, ScenePlanGroupSummary>()
   const sortedElements = sortSceneElements(command.elements)
+  const semanticGroups = createSemanticGroupSummaries(
+    sortedElements.map(({ element }) => ({
+      id: element.id,
+      x: element.bbox.x,
+      y: element.bbox.y,
+      width: element.bbox.width,
+      height: element.bbox.height,
+      groupId: element.groupId,
+      groupLabel: element.groupLabel,
+      partLabel: element.partLabel,
+      zIndex: element.zIndex,
+    })),
+  )
+  const semanticGroupById = new Map(
+    semanticGroups.map((group) => [group.id, group]),
+  )
 
   sortedElements.forEach(({ element, index }) => {
     const groupKey = getGroupKey(element, index)
     const existingGroup = groups.get(groupKey)
+    const semanticGroup = semanticGroupById.get(groupKey)
 
     if (existingGroup) {
       existingGroup.elements.push(summarizeElement(element))
@@ -247,7 +267,9 @@ export function createScenePlanSummary(command: SceneCommand): ScenePlanSummary 
 
     groups.set(groupKey, {
       id: groupKey,
-      label: getGroupLabel(element),
+      label: semanticGroup?.displayLabel ?? getGroupLabel(element),
+      referenceLabels: semanticGroup?.referenceLabels,
+      selected: semanticGroup?.selected,
       elements: [summarizeElement(element)],
     })
   })
@@ -262,7 +284,10 @@ export function createScenePlanSummary(command: SceneCommand): ScenePlanSummary 
 }
 
 export function createScenePlanSummaryFromShapes(
-  canvas: Pick<CanvasState, 'width' | 'height' | 'shapes'>,
+  canvas: Pick<
+    CanvasState,
+    'width' | 'height' | 'shapes' | 'selectedId' | 'selectedGroupId'
+  >,
 ): ScenePlanSummary | null {
   const sceneShapes = canvas.shapes.filter(hasSceneMetadata)
 
@@ -272,10 +297,21 @@ export function createScenePlanSummaryFromShapes(
 
   const groups = new Map<string, ScenePlanGroupSummary>()
   const sortedShapes = sortSceneShapes(sceneShapes)
+  const semanticGroups = createSemanticGroupSummaries(
+    sortedShapes.map(({ shape }) => shape),
+    {
+      selectedId: canvas.selectedId,
+      selectedGroupId: canvas.selectedGroupId,
+    },
+  )
+  const semanticGroupById = new Map(
+    semanticGroups.map((group) => [group.id, group]),
+  )
 
   sortedShapes.forEach(({ shape, index }) => {
     const groupKey = getShapeGroupKey(shape, index)
     const existingGroup = groups.get(groupKey)
+    const semanticGroup = semanticGroupById.get(groupKey)
 
     if (existingGroup) {
       existingGroup.elements.push(summarizeShape(shape, canvas))
@@ -284,7 +320,9 @@ export function createScenePlanSummaryFromShapes(
 
     groups.set(groupKey, {
       id: groupKey,
-      label: getShapeGroupLabel(shape),
+      label: semanticGroup?.displayLabel ?? getShapeGroupLabel(shape),
+      referenceLabels: semanticGroup?.referenceLabels,
+      selected: semanticGroup?.selected,
       elements: [summarizeShape(shape, canvas)],
     })
   })

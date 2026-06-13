@@ -85,7 +85,7 @@ describe('clarification', () => {
       [
         {
           id: 'tree-1',
-          label: '左侧的树（2个部件）',
+          label: '左侧的树（tree-1，2个部件）',
           target: {
             mode: 'semantic',
             groupId: 'tree-1',
@@ -94,7 +94,7 @@ describe('clarification', () => {
         },
         {
           id: 'tree-2',
-          label: '右侧的树（2个部件）',
+          label: '右侧的树（tree-2，2个部件）',
           target: {
             mode: 'semantic',
             groupId: 'tree-2',
