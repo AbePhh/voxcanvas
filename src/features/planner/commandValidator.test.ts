@@ -45,6 +45,36 @@ describe('validatePlannedCommand', () => {
     })
   })
 
+  it('preserves sanitized correction metadata from planner output', () => {
+    expect(
+      validatePlannedCommand({
+        action: 'create',
+        shape: 'circle',
+        color: 'blue',
+        position: 'center',
+        size: 'medium',
+        sourceText: '画一个兰色园形',
+        correction: {
+          correctedText: '画一个蓝色圆形',
+          interpretedIntent: '在画布中心创建蓝色圆形',
+          explanation: '将“兰色园形”纠正为“蓝色圆形”',
+          confidence: 'high',
+          shouldConfirm: false,
+          ignoredField: 'not allowed',
+        },
+      }),
+    ).toMatchObject({
+      status: 'planned',
+      correction: {
+        correctedText: '画一个蓝色圆形',
+        interpretedIntent: '在画布中心创建蓝色圆形',
+        explanation: '将“兰色园形”纠正为“蓝色圆形”',
+        confidence: 'high',
+        shouldConfirm: false,
+      },
+    })
+  })
+
   it('defaults create command size to medium when planner omits it', () => {
     expect(
       validatePlannedCommand({

@@ -24,6 +24,30 @@
   color: #991b1b;
 }
 
+.planner-preview__correction {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 0;
+}
+
+.planner-preview__correction div {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.planner-preview__correction dt,
+.planner-preview__correction dd {
+  margin: 0;
+  color: #78350f;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.planner-preview__correction dt {
+  font-weight: 800;
+}
+
 .planner-preview pre {
   max-height: 124px;
   overflow: auto;

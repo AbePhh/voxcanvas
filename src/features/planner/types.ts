@@ -55,11 +55,20 @@ export type CommandPlannerInput = {
   }
 }
 
+export type CommandCorrectionSummary = {
+  correctedText?: string
+  interpretedIntent?: string
+  explanation?: string
+  confidence?: 'high' | 'medium' | 'low'
+  shouldConfirm?: boolean
+}
+
 export type CommandPlannerResult =
   | {
       status: 'planned'
       command: ParsedCommand
       source: 'local-fallback' | 'ai'
+      correction?: CommandCorrectionSummary
     }
   | {
       status: 'needs-ai'
