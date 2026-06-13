@@ -96,7 +96,7 @@ function normalizeSafeLabel(value: unknown, maxLength = 32) {
   return normalized ? normalized.slice(0, maxLength) : undefined
 }
 
-function normalizeSceneBBox(value: unknown): SceneBBox | null {
+function normalizeSceneBBox(value: unknown, shape: ShapeKind): SceneBBox | null {
   if (!isRecord(value)) {
     return null
   }
@@ -110,10 +110,17 @@ function normalizeSceneBBox(value: unknown): SceneBBox | null {
     return null
   }
 
-  if (
-    value.width < sceneGraphLimits.minSize ||
-    value.height < sceneGraphLimits.minSize
-  ) {
+  const hasValidLineSize =
+    shape === 'line' &&
+    value.width >= 0 &&
+    value.height >= 0 &&
+    value.width + value.height >= sceneGraphLimits.minSize
+  const hasValidShapeSize =
+    shape !== 'line' &&
+    value.width >= sceneGraphLimits.minSize &&
+    value.height >= sceneGraphLimits.minSize
+
+  if (!hasValidLineSize && !hasValidShapeSize) {
     return null
   }
 
@@ -161,7 +168,8 @@ function normalizeSceneElement(
     return null
   }
 
-  const bbox = normalizeSceneBBox(value.bbox)
+  const shape = value.shape as ShapeKind
+  const bbox = normalizeSceneBBox(value.bbox, shape)
 
   if (!bbox || isSceneBBoxWildlyOutOfRange(bbox, sceneSpace)) {
     return null
@@ -180,7 +188,7 @@ function normalizeSceneElement(
     groupId: normalizeSafeLabel(value.groupId, 48),
     groupLabel: normalizeSafeLabel(value.groupLabel),
     partLabel: normalizeSafeLabel(value.partLabel),
-    shape: value.shape as ShapeKind,
+    shape,
     color: value.color as CommandColor,
     bbox,
     zIndex: value.zIndex,

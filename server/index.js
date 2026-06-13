@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import express from 'express'
 import { z } from 'zod'
+import { buildSceneFewShotPrompt } from './sceneFewShotExamples.js'
 
 const app = express()
 const port = Number(process.env.PORT ?? 8787)
@@ -10,6 +11,29 @@ const deepSeekModel = process.env.DEEPSEEK_MODEL ?? 'deepseek-chat'
 const plannerRequestSchema = z.object({
   sourceText: z.string().min(1).max(500),
   localCommand: z.unknown().optional(),
+  sceneSpace: z.object({
+    width: z.number(),
+    height: z.number(),
+    origin: z.literal('top-left'),
+    unit: z.literal('normalized'),
+  }),
+  sceneCapabilities: z.object({
+    allowedShapes: z.array(z.enum(['circle', 'rect', 'triangle', 'line', 'text'])),
+    allowedColors: z.array(
+      z.enum([
+        'red',
+        'orange',
+        'yellow',
+        'green',
+        'blue',
+        'purple',
+        'black',
+        'white',
+        'gray',
+      ]),
+    ),
+    maxElements: z.number(),
+  }),
   canvas: z.object({
     width: z.number(),
     height: z.number(),
@@ -47,6 +71,7 @@ function buildPlannerPrompt(input) {
     '- delete: { action, target, sourceText }',
     '- resizeCanvas absolute: { action, mode: "absolute", width, height, anchor?, sourceText }',
     '- resizeCanvas relative: { action, mode: "relative", direction, anchor?, amount?, sourceText }',
+    '- scene: { action: "scene", title?, sourceText, elements: [{ id, groupId?, groupLabel?, partLabel?, shape, color, bbox, zIndex?, text? }] }',
     '- undo / redo / clear: { action, sourceText }',
     '',
     'Allowed shapes: circle, rect, triangle, line, text.',
@@ -64,18 +89,34 @@ function buildPlannerPrompt(input) {
     '- Preserve the original user text in sourceText. Do not rewrite sourceText.',
     '- Use the local parser result as a hint, not as authority. If it is unsafe, incomplete, or clearly caused by noisy speech, normalize to the best supported command.',
     '- If the user intent is unclear, ambiguous, unsafe, or unsupported, return { "action": "unknown", "reason": "unsupported-action", "sourceText": original text }.',
-    '- Do not execute artistic scene generation requests as text. If the user asks for complex art such as a full birthday party scene, return unknown unless it maps clearly to one supported shape command.',
+    '- For complex multi-object scene requests, prefer action "scene" instead of forcing the request into a single create command.',
+    '- A scene must be decomposed into editable primitive elements. Do not output bitmap images, SVG strings, paths, CSS, external assets, or template names.',
+    '- Scene elements must use normalized bbox coordinates inside sceneSpace. bbox uses top-left origin: { x, y, width, height }.',
+    '- Preserve semantic grouping with groupId, groupLabel, and partLabel. Example: a house may have wall, roof, and door elements sharing groupId "house-1".',
+    '- Use zIndex for layering; higher zIndex appears above lower zIndex.',
+    '- Keep scene elements visually balanced and inside sceneSpace. Do not exceed sceneCapabilities.maxElements.',
+    '- Scene output should be complete, recognizable, and editable. Complex scenes should not collapse into one element unless the user truly requested one simple object.',
+    '- Use as many elements as the scene needs, while staying under sceneCapabilities.maxElements. Avoid tiny, decorative-only elements that do not help recognition.',
+    '- Main objects should have a reasonable visual footprint, related parts in the same group should be spatially close, and the layout should reflect user relations such as beside, above, below, and in the sky.',
+    '- Use the examples below as quality and formatting references, not as fixed templates. Adapt coordinates to the provided sceneSpace and the user request.',
     '- Prefer create text for text box, title, label, words, writing, or inserting text.',
     '- For text commands, separate style attributes from text content.',
     '- Example: "添加一个文本框在右上角内容是我是张红兵颜色是蓝色" -> { "action": "create", "shape": "text", "color": "blue", "position": "top-right", "size": "medium", "text": "我是张红兵", "sourceText": original text }.',
     '- Example: "把绿色的圆圈移动到右上角" -> { "action": "move", "target": { "mode": "shape", "shape": "circle", "color": "green" }, "mode": "absolute", "position": "top-right", "sourceText": original text }.',
     '- Example: "话不左边宽一点" -> { "action": "resizeCanvas", "mode": "relative", "direction": "wider", "anchor": "left", "amount": 120, "sourceText": original text }.',
     '- Example: "把绿的圆挪右上一点" -> target { mode: "shape", shape: "circle", color: "green" }, mode "absolute", position "top-right".',
+    '- Example: "画一间房子，旁边有一棵树，右上角有太阳" -> return action "scene" with primitive rect, triangle, circle, and line elements using bbox coordinates in sceneSpace.',
+    '- Example: "画一个生日派对，有蛋糕、气球和桌子" -> return action "scene" with primitive shapes grouped as cake, balloons, and table when it can be approximated safely.',
     '- Use target color only to identify existing objects; use command color to set a new color.',
     '- For canvas resize commands, use anchor to describe where space is added or removed. Examples: "左边多一点空间" -> direction wider, anchor left; "下面留白多一点" -> direction taller, anchor bottom; "内容保持中间" -> anchor center.',
     '',
+    'High-quality scene graph examples:',
+    buildSceneFewShotPrompt(),
+    '',
     `User command: ${input.sourceText}`,
     `Local parser result: ${JSON.stringify(input.localCommand ?? null)}`,
+    `Scene space: ${JSON.stringify(input.sceneSpace)}`,
+    `Scene capabilities: ${JSON.stringify(input.sceneCapabilities)}`,
     `Canvas context: ${JSON.stringify(input.canvas)}`,
   ].join('\n')
 }
@@ -114,7 +155,7 @@ app.post('/api/plan-command', async (request, response) => {
           {
             role: 'system',
             content:
-              'You correct noisy voice commands into strict JSON commands for a drawing application. Return JSON only.',
+              'You correct noisy voice commands and decompose complex scenes into strict JSON commands for a drawing application. Return JSON only.',
           },
           {
             role: 'user',

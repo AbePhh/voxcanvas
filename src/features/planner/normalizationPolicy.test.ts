@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { getNormalizationDecision } from './normalizationPolicy'
+import {
+  canFallbackToLocalCommand,
+  getNormalizationDecision,
+} from './normalizationPolicy'
 import type { ParsedCommand } from '../commands/types'
 
 describe('getNormalizationDecision', () => {
@@ -31,7 +34,7 @@ describe('getNormalizationDecision', () => {
     })
   })
 
-  it('keeps locally understood canvas ASR corrections on the local path', () => {
+  it('routes canvas resize commands through AI normalization', () => {
     expect(
       getNormalizationDecision('话不左边宽一点', {
         action: 'resizeCanvas',
@@ -42,8 +45,8 @@ describe('getNormalizationDecision', () => {
         sourceText: '话不左边宽一点',
       }),
     ).toEqual({
-      useAi: false,
-      reason: 'local-command-is-confident',
+      useAi: true,
+      reason: 'canvas-resize-needs-semantic-normalization',
     })
   })
 
@@ -68,7 +71,59 @@ describe('getNormalizationDecision', () => {
     })
   })
 
-  it('keeps explicit edit commands local when they are not noisy', () => {
+  it('routes complex multi-object scenes to AI planning', () => {
+    expect(
+      getNormalizationDecision('画一间房子，旁边有一棵树，右上角有太阳', {
+        action: 'unknown',
+        reason: 'missing-shape',
+        sourceText: '画一间房子，旁边有一棵树，右上角有太阳',
+      }),
+    ).toEqual({
+      useAi: true,
+      reason: 'complex-scene-needs-planning',
+    })
+
+    expect(
+      getNormalizationDecision('画一个生日派对，有蛋糕、气球和桌子', confidentCreateCommand),
+    ).toEqual({
+      useAi: true,
+      reason: 'complex-scene-needs-planning',
+    })
+  })
+
+  it('does not fallback to a local single-shape command for complex scenes', () => {
+    const decision = getNormalizationDecision(
+      '画一间房子旁边有一棵树右上角有太阳',
+      {
+        action: 'create',
+        shape: 'circle',
+        position: 'top-right',
+        size: 'medium',
+        sourceText: '画一间房子旁边有一棵树右上角有太阳',
+      },
+    )
+
+    expect(decision).toEqual({
+      useAi: true,
+      reason: 'complex-scene-needs-planning',
+    })
+    expect(canFallbackToLocalCommand(decision, confidentCreateCommand)).toBe(false)
+  })
+
+  it('allows local fallback for recoverable canvas resize normalization', () => {
+    const localResizeCommand: ParsedCommand = {
+      action: 'resizeCanvas',
+      mode: 'relative',
+      direction: 'wider',
+      anchor: 'left',
+      sourceText: '话不左边宽一点',
+    }
+    const decision = getNormalizationDecision('话不左边宽一点', localResizeCommand)
+
+    expect(canFallbackToLocalCommand(decision, localResizeCommand)).toBe(true)
+  })
+
+  it('routes edit commands through AI normalization', () => {
     expect(
       getNormalizationDecision('把绿色圆形移到右上角', {
         action: 'move',
@@ -82,8 +137,8 @@ describe('getNormalizationDecision', () => {
         sourceText: '把绿色圆形移到右上角',
       }),
     ).toEqual({
-      useAi: false,
-      reason: 'local-command-is-confident',
+      useAi: true,
+      reason: 'edit-command-needs-semantic-normalization',
     })
   })
 
@@ -102,7 +157,7 @@ describe('getNormalizationDecision', () => {
       }),
     ).toEqual({
       useAi: true,
-      reason: 'voice-input-may-need-correction',
+      reason: 'edit-command-needs-semantic-normalization',
     })
   })
 })
