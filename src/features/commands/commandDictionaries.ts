@@ -6,11 +6,11 @@ import type {
 import type { ShapeKind } from '../canvas/types'
 
 export const shapeKeywords: Record<ShapeKind, string[]> = {
-  circle: ['圆', '圆形', '圈', '椭圆', '太阳'],
-  rect: ['矩形', '长方形', '正方形', '方块', '房子', '门'],
-  triangle: ['三角形', '三角', '屋顶'],
+  circle: ['圆', '圆形', '圆圈', '圈', '椭圆'],
+  rect: ['矩形', '长方形', '正方形', '方形', '方块'],
+  triangle: ['三角形', '三角'],
   line: ['线', '直线', '线条', '横线', '竖线'],
-  text: ['文字', '文本', '标签'],
+  text: ['文字', '文本', '文本框', '标签'],
 }
 
 export const colorKeywords: Record<CommandColor, string[]> = {
