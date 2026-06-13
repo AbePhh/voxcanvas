@@ -1,0 +1,39 @@
+.canvas-scene-summary {
+  border: 1px solid #d7dde8;
+  padding: 18px;
+  background: #ffffff;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.canvas-scene-summary h2 {
+  margin: 0 0 12px;
+  color: #111827;
+  font-size: 18px;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.canvas-scene-summary .scene-plan {
+  margin-top: 0;
+}
+
+.canvas-scene-summary__empty {
+  margin: 0;
+  color: #6b7280;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+@media (min-width: 1501px) {
+  .canvas-scene-summary {
+    height: 100%;
+  }
+}
+
+@media (max-width: 1500px) {
+  .canvas-scene-summary {
+    max-height: 320px;
+  }
+}

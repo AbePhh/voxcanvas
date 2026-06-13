@@ -1,17 +1,24 @@
 import type { SceneCommand } from './types'
 import { createScenePlanSummary } from './scenePlan'
+import type { ScenePlanSummary } from './scenePlan'
 import './ScenePlanPreview.css'
 
 type ScenePlanPreviewProps = {
-  command: SceneCommand
+  command?: SceneCommand
+  summary?: ScenePlanSummary
   showSteps?: boolean
 }
 
 export function ScenePlanPreview({
   command,
+  summary,
   showSteps = false,
 }: ScenePlanPreviewProps) {
-  const scenePlan = createScenePlanSummary(command)
+  const scenePlan = summary ?? (command ? createScenePlanSummary(command) : null)
+
+  if (!scenePlan) {
+    return null
+  }
 
   return (
     <section className="scene-plan" aria-label="Scene plan">
@@ -27,7 +34,11 @@ export function ScenePlanPreview({
             <span>{group.label}</span>
             <small>
               {group.elements
-                .map((element) => element.partLabel ?? element.label)
+                .map((element) => {
+                  const label = element.partLabel ?? element.label
+
+                  return element.detail ? `${label}：${element.detail}` : label
+                })
                 .join('、')}
             </small>
           </li>
