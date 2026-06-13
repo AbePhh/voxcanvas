@@ -9,6 +9,7 @@ import {
   applyResizeCanvasCommand,
   applyResizeCommand,
   applyRedoCommand,
+  applySceneCommand,
   applyUndoCommand,
 } from './features/canvas/canvasOperations'
 import { DrawingCanvas } from './features/canvas/DrawingCanvas'
@@ -67,6 +68,8 @@ function App() {
           return applyResizeCommand(current, command)
         case 'resizeCanvas':
           return applyResizeCanvasCommand(current, command)
+        case 'scene':
+          return applySceneCommand(current, command)
         case 'clear':
           return applyClearCommand(current)
         case 'undo':

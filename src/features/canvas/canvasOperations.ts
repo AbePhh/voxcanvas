@@ -7,9 +7,11 @@ import type {
   RecolorShapeCommand,
   ResizeCanvasCommand,
   ResizeShapeCommand,
+  SceneCommand,
 } from '../commands/types'
 import { colorStyles } from './colorStyles'
 import { positionAnchors, resolveTargetShape } from './targetMatching'
+import { createShapesFromSceneCommand } from './sceneGraph'
 import type { CanvasSnapshot, CanvasState, ShapeObject } from './types'
 
 const sizeScale = {
@@ -184,6 +186,25 @@ export function applyCreateCommand(
     history: [...state.history, takeSnapshot(state)],
     selectedId: shape.id,
     shapes: [...state.shapes, shape],
+  }
+}
+
+export function applySceneCommand(
+  state: CanvasState,
+  command: SceneCommand,
+): CanvasState {
+  const shapes = createShapesFromSceneCommand(command, state)
+
+  if (shapes.length === 0) {
+    return state
+  }
+
+  return {
+    ...state,
+    future: [],
+    history: [...state.history, takeSnapshot(state)],
+    selectedId: shapes.at(-1)?.id,
+    shapes: [...state.shapes, ...shapes],
   }
 }
 

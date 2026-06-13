@@ -8,6 +8,7 @@ import {
   applyResizeCanvasCommand,
   applyResizeCommand,
   applyRedoCommand,
+  applySceneCommand,
   applyUndoCommand,
   createShapeFromCommand,
 } from './canvasOperations'
@@ -453,5 +454,81 @@ describe('canvasOperations', () => {
     })
 
     expect(deleted).toBe(withoutSelection)
+  })
+
+  it('applies a scene command as one undoable operation', () => {
+    const scene = applySceneCommand(baseCanvas, {
+      action: 'scene',
+      title: '房子和太阳',
+      sourceText: '画一间房子和太阳',
+      elements: [
+        {
+          id: 'sun',
+          groupId: 'sun-1',
+          groupLabel: '太阳',
+          partLabel: '主体',
+          shape: 'circle',
+          color: 'yellow',
+          bbox: { x: 760, y: 60, width: 120, height: 120 },
+          zIndex: 20,
+        },
+        {
+          id: 'house-wall',
+          groupId: 'house-1',
+          groupLabel: '房子',
+          partLabel: '墙体',
+          shape: 'rect',
+          color: 'orange',
+          bbox: { x: 380, y: 330, width: 240, height: 160 },
+          zIndex: 10,
+        },
+      ],
+    })
+
+    expect(scene.shapes).toHaveLength(2)
+    expect(scene.history).toHaveLength(1)
+    expect(scene.shapes[0]).toMatchObject({
+      type: 'rect',
+      groupId: 'house-1',
+      groupLabel: '房子',
+      partLabel: '墙体',
+      fill: '#f97316',
+      x: 365,
+      y: 317,
+      width: 230,
+      height: 154,
+      zIndex: 10,
+    })
+    expect(scene.shapes[1]).toMatchObject({
+      type: 'circle',
+      groupId: 'sun-1',
+      fill: '#facc15',
+      zIndex: 20,
+    })
+
+    const undone = applyUndoCommand(scene)
+
+    expect(undone.shapes).toHaveLength(0)
+    expect(undone.future).toHaveLength(1)
+  })
+
+  it('fits slightly out-of-bounds scene elements into the canvas', () => {
+    const scene = applySceneCommand(baseCanvas, {
+      action: 'scene',
+      title: '偏移场景',
+      sourceText: '画一个有点偏出去的场景',
+      elements: [
+        {
+          id: 'wide-rect',
+          shape: 'rect',
+          color: 'blue',
+          bbox: { x: -60, y: 30, width: 1100, height: 120 },
+          zIndex: 1,
+        },
+      ],
+    })
+
+    expect(scene.shapes[0].x).toBeGreaterThanOrEqual(0)
+    expect(scene.shapes[0].x + scene.shapes[0].width).toBeLessThanOrEqual(baseCanvas.width)
   })
 })

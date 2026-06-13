@@ -11,6 +11,7 @@ export type CommandAction =
   | 'clear'
   | 'export'
   | 'resizeCanvas'
+  | 'scene'
   | 'unknown'
 
 export type CommandColor =
@@ -123,6 +124,32 @@ export type ResizeCanvasCommand =
       sourceText: string
     }
 
+export type SceneBBox = {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export type SceneElement = {
+  id: string
+  groupId?: string
+  groupLabel?: string
+  partLabel?: string
+  shape: ShapeKind
+  color: CommandColor
+  bbox: SceneBBox
+  zIndex?: number
+  text?: string
+}
+
+export type SceneCommand = {
+  action: 'scene'
+  title?: string
+  sourceText: string
+  elements: SceneElement[]
+}
+
 export type SimpleCanvasCommand =
   | {
       action: 'undo' | 'redo' | 'clear'
@@ -134,6 +161,7 @@ export type SimpleCanvasCommand =
       sourceText: string
     }
   | ResizeCanvasCommand
+  | SceneCommand
   | CreateShapeCommand
   | MoveShapeCommand
   | RecolorShapeCommand
