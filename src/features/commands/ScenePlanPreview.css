@@ -1,0 +1,51 @@
+.scene-plan {
+  margin-top: 10px;
+  border: 1px solid #bbf7d0;
+  padding: 10px;
+  background: #f0fdf4;
+}
+
+.scene-plan__summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+  justify-content: space-between;
+  color: #14532d;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.scene-plan__summary span {
+  color: #166534;
+}
+
+.scene-plan__groups {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.scene-plan__groups li {
+  display: grid;
+  gap: 2px;
+  color: #14532d;
+  font-size: 13px;
+}
+
+.scene-plan__groups small {
+  color: #166534;
+  line-height: 1.35;
+}
+
+.scene-plan__steps {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: #14532d;
+  font-size: 12px;
+  line-height: 1.35;
+}
