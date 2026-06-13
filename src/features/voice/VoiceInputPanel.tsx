@@ -268,51 +268,53 @@ export function VoiceInputPanel({
         )}
       </div>
 
-      <CommandPreview command={parsedCommand} />
-      {clarificationFeedback && clarificationFeedback.status !== 'ok' ? (
-        <div className="target-feedback" aria-live="polite">
-          <h3>Target Needs Clarification</h3>
-          <p>{clarificationFeedback.message}</p>
-          {clarificationFeedback.status === 'ambiguous' ? (
+      <div className="voice-panel__results">
+        <CommandPreview command={parsedCommand} />
+        {clarificationFeedback && clarificationFeedback.status !== 'ok' ? (
+          <div className="target-feedback" aria-live="polite">
+            <h3>Target Needs Clarification</h3>
+            <p>{clarificationFeedback.message}</p>
+            {clarificationFeedback.status === 'ambiguous' ? (
+              <ul>
+                {clarificationFeedback.candidates.map((candidate) => (
+                  <li key={candidate.id}>{candidate.label}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
+        {pendingExportClarification ? (
+          <div className="format-feedback" aria-live="polite">
+            <h3>Choose Export Format</h3>
+            <p>请说明要导出 PNG、JPG 还是 SVG。</p>
             <ul>
-              {clarificationFeedback.candidates.map((candidate) => (
-                <li key={candidate.id}>{candidate.label}</li>
-              ))}
+              <li>PNG：适合保留清晰线条和透明能力</li>
+              <li>JPG：适合普通图片分享，白色背景</li>
+              <li>SVG：适合继续编辑和保持矢量清晰度</li>
             </ul>
-          ) : null}
-        </div>
-      ) : null}
-      {pendingExportClarification ? (
-        <div className="format-feedback" aria-live="polite">
-          <h3>Choose Export Format</h3>
-          <p>请说明要导出 PNG、JPG 还是 SVG。</p>
-          <ul>
-            <li>PNG：适合保留清晰线条和透明能力</li>
-            <li>JPG：适合普通图片分享，白色背景</li>
-            <li>SVG：适合继续编辑和保持矢量清晰度</li>
-          </ul>
-        </div>
-      ) : null}
-      <PlannerPreview
-        canvasState={canvasState}
-        enabled={
-          isPlanning ||
-          plannerResult !== null ||
-          parsedCommand?.action === 'unknown'
-        }
-        isPlanning={isPlanning}
-        localCommand={parsedCommand}
-        result={plannerResult}
-        sourceText={previewText}
-      />
+          </div>
+        ) : null}
+        <PlannerPreview
+          canvasState={canvasState}
+          enabled={
+            isPlanning ||
+            plannerResult !== null ||
+            parsedCommand?.action === 'unknown'
+          }
+          isPlanning={isPlanning}
+          localCommand={parsedCommand}
+          result={plannerResult}
+          sourceText={previewText}
+        />
 
-      {supportStatus === 'unsupported' ? (
-        <p className="voice-message">
-          Web Speech API is not available in this browser. Please test with Chrome.
-        </p>
-      ) : null}
+        {supportStatus === 'unsupported' ? (
+          <p className="voice-message">
+            Web Speech API is not available in this browser. Please test with Chrome.
+          </p>
+        ) : null}
 
-      {errorMessage ? <p className="voice-message">{errorMessage}</p> : null}
+        {errorMessage ? <p className="voice-message">{errorMessage}</p> : null}
+      </div>
     </section>
   )
 }

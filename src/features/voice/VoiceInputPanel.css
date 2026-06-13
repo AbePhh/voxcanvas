@@ -1,7 +1,12 @@
 .voice-panel {
+  display: grid;
+  grid-template-rows: auto auto 112px minmax(0, 1fr);
+  row-gap: 14px;
   border: 1px solid #d7dde8;
   background: #ffffff;
   padding: 18px;
+  height: 520px;
+  min-height: 0;
 }
 
 .voice-panel__header {
@@ -9,7 +14,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 16px;
+  margin-bottom: 0;
 }
 
 .voice-panel h2 {
@@ -48,15 +53,15 @@
 
 .voice-actions {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: minmax(0, 1fr) 64px 64px;
   gap: 8px;
-  margin-bottom: 14px;
+  margin-bottom: 0;
 }
 
 .voice-actions button {
   min-height: 38px;
   border: 1px solid #cbd5e1;
-  padding: 0 12px;
+  padding: 0 8px;
   color: #111827;
   background: #ffffff;
   font-weight: 700;
@@ -79,14 +84,25 @@
 }
 
 .transcript-box {
-  min-height: 112px;
+  height: 112px;
   border: 1px solid #e5e7eb;
   padding: 12px;
-  margin-bottom: 14px;
+  margin-bottom: 0;
+  overflow: auto;
   background: #f8fafc;
   color: #111827;
   font-size: 14px;
   line-height: 1.5;
+}
+
+.voice-panel__results {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 2px;
+  scrollbar-gutter: stable;
 }
 
 .transcript-box .interim {
@@ -107,7 +123,6 @@
 .target-feedback {
   border: 1px solid #fecaca;
   padding: 12px;
-  margin-top: 14px;
   background: #fef2f2;
 }
 
@@ -145,7 +160,6 @@
 .format-feedback {
   border: 1px solid #bfdbfe;
   padding: 12px;
-  margin-top: 14px;
   background: #eff6ff;
 }
 
@@ -181,6 +195,15 @@
 }
 
 @media (max-width: 620px) {
+  .voice-panel {
+    display: block;
+    height: auto;
+  }
+
+  .voice-panel__results {
+    overflow: visible;
+  }
+
   .voice-actions {
     grid-template-columns: 1fr;
   }

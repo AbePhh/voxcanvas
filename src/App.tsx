@@ -12,6 +12,7 @@ import {
   applySceneCommand,
   applyUndoCommand,
 } from './features/canvas/canvasOperations'
+import { CanvasSceneSummary } from './features/canvas/CanvasSceneSummary'
 import { DrawingCanvas } from './features/canvas/DrawingCanvas'
 import { sampleCanvas } from './features/canvas/sampleCanvas'
 import type { ParsedCommand } from './features/commands/types'
@@ -105,7 +106,7 @@ function App() {
         <div className="canvas-stage">
           <DrawingCanvas state={canvasState} svgRef={canvasSvgRef} />
         </div>
-        <aside className="side-panel" aria-label="Workspace controls">
+        <aside className="control-panel" aria-label="Voice controls">
           <VoiceInputPanel
             canvasState={canvasState}
             onCommandParsed={handleCommandParsed}
@@ -116,6 +117,10 @@ function App() {
               {exportMessage}
             </section>
           ) : null}
+        </aside>
+
+        <aside className="context-panel" aria-label="Scene context">
+          <CanvasSceneSummary canvasState={canvasState} />
 
           <section className="inspector" aria-label="Canvas object list">
             <h2>Scene Objects</h2>
