@@ -368,32 +368,6 @@ function getTargetMatchSummary(
   }
 }
 
-function validateSingleTarget(
-  target: CommandTarget,
-  rawValue: unknown,
-  options: ValidatorOptions,
-) {
-  if (!options.canvas) {
-    return {
-      status: 'invalid',
-      reason: 'missing-canvas-context',
-      rawValue,
-    } satisfies CommandPlannerResult
-  }
-
-  const { matchCount } = getTargetMatchSummary(target, options.canvas)
-
-  if (matchCount !== 1) {
-    return {
-      status: 'invalid',
-      reason: matchCount === 0 ? 'target-not-found' : 'ambiguous-target',
-      rawValue,
-    } satisfies CommandPlannerResult
-  }
-
-  return null
-}
-
 function validateTargetSelection(
   target: CommandTarget,
   rawValue: unknown,
@@ -772,7 +746,9 @@ export function validatePlannedCommand(
       }
     }
 
-    const targetError = validateSingleTarget(target, rawValue, options)
+    const targetError = validateTargetSelection(target, rawValue, options, {
+      allowGroup: target.mode === 'semantic' && !target.id,
+    })
 
     if (targetError) {
       return targetError
