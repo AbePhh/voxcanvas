@@ -4,6 +4,8 @@ import type {
   CommandTarget,
   ParsedCommand,
 } from '../commands/types'
+import { colorLabels, positionLabels, shapeLabels } from '../commands/commandLabels'
+import { describeSceneElement } from '../commands/scenePlan'
 import { colorStyles } from './colorStyles'
 import { matchesTargetPosition, resolveTargetShape } from './targetMatching'
 import type { CanvasState, ShapeObject } from './types'
@@ -27,38 +29,6 @@ export type TargetFeedback =
       candidates: TargetCandidate[]
     }
 
-const shapeLabels = {
-  circle: '圆形',
-  rect: '矩形',
-  triangle: '三角形',
-  line: '线条',
-  text: '文本',
-}
-
-const colorLabels: Record<CommandColor, string> = {
-  red: '红色',
-  orange: '橙色',
-  yellow: '黄色',
-  green: '绿色',
-  blue: '蓝色',
-  purple: '紫色',
-  black: '黑色',
-  white: '白色',
-  gray: '灰色',
-}
-
-const positionLabels: Record<CommandPosition, string> = {
-  'top-left': '左上方',
-  top: '上方',
-  'top-right': '右上方',
-  left: '左侧',
-  center: '中间',
-  right: '右侧',
-  'bottom-left': '左下方',
-  bottom: '下方',
-  'bottom-right': '右下方',
-}
-
 function detectShapeColor(shape: ShapeObject) {
   return (Object.entries(colorStyles) as Array<[CommandColor, { fill: string }]>).find(
     ([, style]) => style.fill.toLowerCase() === shape.fill.toLowerCase(),
@@ -77,6 +47,28 @@ function describeShapePosition(shape: ShapeObject, canvas: CanvasState) {
 }
 
 function describeShape(shape: ShapeObject, canvas: CanvasState) {
+  if (shape.groupLabel || shape.partLabel) {
+    const semanticLabel = describeSceneElement({
+      id: shape.id,
+      groupId: shape.groupId,
+      groupLabel: shape.groupLabel,
+      partLabel: shape.partLabel,
+      shape: shape.type,
+      color: detectShapeColor(shape) ?? 'gray',
+      bbox: {
+        x: shape.x,
+        y: shape.y,
+        width: shape.width,
+        height: shape.height,
+      },
+      zIndex: shape.zIndex,
+      text: shape.text,
+    })
+    const selectedText = shape.id === canvas.selectedId ? '当前选中的' : ''
+
+    return `${selectedText}${semanticLabel}`
+  }
+
   const color = detectShapeColor(shape)
   const colorText = color ? colorLabels[color] : ''
   const selectedText = shape.id === canvas.selectedId ? '当前选中的' : ''

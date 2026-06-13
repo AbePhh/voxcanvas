@@ -20,6 +20,11 @@
   line-height: 1.45;
 }
 
+.planner-preview__warning {
+  margin-top: 10px;
+  color: #991b1b;
+}
+
 .planner-preview pre {
   max-height: 180px;
   overflow: auto;

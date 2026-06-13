@@ -1,4 +1,5 @@
 import type { ParsedCommand } from './types'
+import { ScenePlanPreview } from './ScenePlanPreview'
 import './CommandPreview.css'
 
 type CommandPreviewProps = {
@@ -69,6 +70,7 @@ export function CommandPreview({ command }: CommandPreviewProps) {
           <p className={command.action === 'unknown' ? 'parse-error' : 'parse-ok'}>
             {formatCommand(command)}
           </p>
+          {command.action === 'scene' ? <ScenePlanPreview command={command} /> : null}
           <pre>{JSON.stringify(command, null, 2)}</pre>
         </>
       ) : (

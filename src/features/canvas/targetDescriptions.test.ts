@@ -107,6 +107,68 @@ describe('createTargetFeedback', () => {
     })
   })
 
+  it('prefers scene group and part labels for generated scene objects', () => {
+    const canvas: CanvasState = {
+      ...baseCanvas,
+      selectedId: 'house-roof',
+      shapes: [
+        {
+          id: 'house-roof',
+          type: 'triangle',
+          x: 360,
+          y: 180,
+          width: 260,
+          height: 120,
+          fill: '#ef4444',
+          stroke: '#991b1b',
+          groupId: 'house-1',
+          groupLabel: '房子',
+          partLabel: '屋顶',
+          zIndex: 20,
+        },
+        {
+          id: 'tree-top',
+          type: 'circle',
+          x: 680,
+          y: 220,
+          width: 130,
+          height: 130,
+          fill: '#22c55e',
+          stroke: '#166534',
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树冠',
+          zIndex: 12,
+        },
+      ],
+    }
+
+    const feedback = createTargetFeedback(
+      {
+        action: 'delete',
+        target: {
+          mode: 'any',
+        },
+        sourceText: '删除一个东西',
+      },
+      canvas,
+    )
+
+    expect(feedback).toMatchObject({
+      status: 'ambiguous',
+      candidates: expect.arrayContaining([
+        expect.objectContaining({
+          id: 'house-roof',
+          label: '当前选中的房子的屋顶',
+        }),
+        expect.objectContaining({
+          id: 'tree-top',
+          label: '树的树冠',
+        }),
+      ]),
+    })
+  })
+
   it('explains when no target matches', () => {
     expect(
       createTargetFeedback(

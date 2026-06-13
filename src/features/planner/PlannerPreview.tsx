@@ -3,6 +3,7 @@ import { createPlannerInput } from './types'
 import type { CanvasState } from '../canvas/types'
 import type { CommandPlannerResult } from './types'
 import type { ParsedCommand } from '../commands/types'
+import { ScenePlanPreview } from '../commands/ScenePlanPreview'
 import './PlannerPreview.css'
 
 type PlannerPreviewProps = {
@@ -28,10 +29,13 @@ export function PlannerPreview({
 
   const input = createPlannerInput(sourceText, canvasState, localCommand ?? undefined)
   const previewResult = result ?? createFallbackPlannerResult(input)
+  const plannedCommand =
+    previewResult.status === 'planned' ? previewResult.command : null
+  const plannedScene = plannedCommand?.action === 'scene' ? plannedCommand : null
 
   return (
     <div className="planner-preview" aria-live="polite">
-      <h3>Planner Fallback</h3>
+      <h3>{plannedScene ? 'Scene Plan' : 'Planner Fallback'}</h3>
       {isPlanning ? <p>AI planner is interpreting this command...</p> : null}
       {!isPlanning && previewResult.status === 'needs-ai' ? (
         <p>
@@ -40,10 +44,22 @@ export function PlannerPreview({
         </p>
       ) : null}
       {!isPlanning && previewResult.status === 'planned' ? (
-        <p>AI planner returned a valid command and it was executed.</p>
+        <p>
+          AI planner returned a valid {plannedScene ? 'scene plan' : 'command'} and
+          it was executed.
+        </p>
       ) : null}
       {!isPlanning && previewResult.status === 'invalid' ? (
         <p>AI planner returned an invalid command: {previewResult.reason}</p>
+      ) : null}
+      {plannedScene ? <ScenePlanPreview command={plannedScene} showSteps /> : null}
+      {previewResult.status === 'planned' &&
+      previewResult.command.action === 'create' &&
+      localCommand?.action === 'unknown' ? (
+        <p className="planner-preview__warning">
+          This complex request was normalized to one shape instead of a scene graph.
+          Try a more explicit multi-object command or improve the scene prompt.
+        </p>
       ) : null}
       <pre>
         {JSON.stringify(
