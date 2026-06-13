@@ -20,7 +20,18 @@ export const plannerSceneCapabilities = {
 
 export type PlannerCanvasObject = Pick<
   ShapeObject,
-  'id' | 'type' | 'x' | 'y' | 'width' | 'height' | 'fill' | 'text'
+  | 'id'
+  | 'type'
+  | 'x'
+  | 'y'
+  | 'width'
+  | 'height'
+  | 'fill'
+  | 'text'
+  | 'groupId'
+  | 'groupLabel'
+  | 'partLabel'
+  | 'zIndex'
 >
 
 export type CommandPlannerInput = {
@@ -89,6 +100,10 @@ export function createPlannerInput(
         height: shape.height,
         fill: shape.fill,
         text: shape.text,
+        groupId: shape.groupId,
+        groupLabel: shape.groupLabel,
+        partLabel: shape.partLabel,
+        zIndex: shape.zIndex,
       })),
     },
   }

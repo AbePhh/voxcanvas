@@ -531,4 +531,89 @@ describe('canvasOperations', () => {
     expect(scene.shapes[0].x).toBeGreaterThanOrEqual(0)
     expect(scene.shapes[0].x + scene.shapes[0].width).toBeLessThanOrEqual(baseCanvas.width)
   })
+
+  it('moves, recolors, and deletes semantic scene targets', () => {
+    const scene = applySceneCommand(baseCanvas, {
+      action: 'scene',
+      title: '房子和树',
+      sourceText: '画一间房子旁边有一棵树',
+      elements: [
+        {
+          id: 'tree-trunk',
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树干',
+          shape: 'rect',
+          color: 'orange',
+          bbox: { x: 680, y: 330, width: 50, height: 150 },
+          zIndex: 10,
+        },
+        {
+          id: 'tree-top',
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树冠',
+          shape: 'circle',
+          color: 'green',
+          bbox: { x: 630, y: 230, width: 150, height: 150 },
+          zIndex: 11,
+        },
+        {
+          id: 'house-roof',
+          groupId: 'house-1',
+          groupLabel: '房子',
+          partLabel: '屋顶',
+          shape: 'triangle',
+          color: 'red',
+          bbox: { x: 260, y: 230, width: 260, height: 120 },
+          zIndex: 12,
+        },
+      ],
+    })
+    const treeShapes = scene.shapes.filter((shape) => shape.groupLabel === '树')
+    const houseRoof = scene.shapes.find((shape) => shape.partLabel === '屋顶')
+
+    const moved = applyMoveCommand(scene, {
+      action: 'move',
+      target: { mode: 'semantic', groupLabel: '树' },
+      mode: 'relative',
+      direction: 'right',
+      distance: 48,
+      sourceText: '把树往右移动一点',
+    })
+
+    expect(moved.shapes.filter((shape) => shape.groupLabel === '树')).toEqual(
+      treeShapes.map((shape) => ({
+        ...shape,
+        x: shape.x + 48,
+      })),
+    )
+    expect(moved.shapes.find((shape) => shape.partLabel === '屋顶')?.x).toBe(
+      houseRoof?.x,
+    )
+
+    const recolored = applyRecolorCommand(moved, {
+      action: 'recolor',
+      target: { mode: 'semantic', groupLabel: '房子', partLabel: '屋顶' },
+      color: 'blue',
+      sourceText: '把房子的屋顶改成蓝色',
+    })
+
+    expect(recolored.shapes.find((shape) => shape.partLabel === '屋顶')).toMatchObject({
+      fill: '#3b82f6',
+      stroke: '#1e40af',
+    })
+
+    const deleted = applyDeleteCommand(recolored, {
+      action: 'delete',
+      target: { mode: 'semantic', groupLabel: '树' },
+      sourceText: '删除树',
+    })
+
+    expect(deleted.shapes.some((shape) => shape.groupLabel === '树')).toBe(false)
+    expect(deleted.shapes.some((shape) => shape.groupLabel === '房子')).toBe(true)
+    expect(applyUndoCommand(deleted).shapes.some((shape) => shape.groupLabel === '树')).toBe(
+      true,
+    )
+  })
 })

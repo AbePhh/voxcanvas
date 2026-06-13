@@ -144,7 +144,7 @@ export function resolveClarificationResponse(
 
     return {
       ...pending.command,
-      target: {
+      target: candidate.target ?? {
         mode: 'any',
         id: candidate.id,
       },

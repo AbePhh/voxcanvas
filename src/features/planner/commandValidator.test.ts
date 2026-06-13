@@ -508,6 +508,143 @@ describe('validatePlannedCommand', () => {
       reason: 'ambiguous-target',
     })
   })
+  it('accepts semantic scene targets for unique groups and parts', () => {
+    const canvasWithSceneObjects = {
+      ...canvasWithOneCircle,
+      objects: [
+        {
+          id: 'tree-trunk',
+          type: 'rect' as const,
+          x: 650,
+          y: 330,
+          width: 50,
+          height: 150,
+          fill: '#f97316',
+          text: undefined,
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树干',
+          zIndex: 10,
+        },
+        {
+          id: 'tree-top',
+          type: 'circle' as const,
+          x: 610,
+          y: 230,
+          width: 150,
+          height: 150,
+          fill: '#22c55e',
+          text: undefined,
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树冠',
+          zIndex: 11,
+        },
+        {
+          id: 'house-roof',
+          type: 'triangle' as const,
+          x: 260,
+          y: 230,
+          width: 260,
+          height: 120,
+          fill: '#ef4444',
+          text: undefined,
+          groupId: 'house-1',
+          groupLabel: '房子',
+          partLabel: '屋顶',
+          zIndex: 12,
+        },
+      ],
+    }
+
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'move',
+          target: { mode: 'semantic', groupLabel: '树' },
+          mode: 'relative',
+          direction: 'right',
+          distance: 48,
+        },
+        { canvas: canvasWithSceneObjects },
+      ),
+    ).toMatchObject({
+      status: 'planned',
+      command: {
+        action: 'move',
+        target: {
+          mode: 'semantic',
+          groupLabel: '树',
+        },
+      },
+    })
+
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'recolor',
+          target: { mode: 'semantic', groupLabel: '房子', partLabel: '屋顶' },
+          color: 'blue',
+        },
+        { canvas: canvasWithSceneObjects },
+      ),
+    ).toMatchObject({
+      status: 'planned',
+      command: {
+        action: 'recolor',
+        target: {
+          mode: 'semantic',
+          groupLabel: '房子',
+          partLabel: '屋顶',
+        },
+      },
+    })
+  })
+
+  it('rejects ambiguous semantic scene targets', () => {
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'delete',
+          target: { mode: 'semantic', groupLabel: '树' },
+        },
+        {
+          canvas: {
+            ...canvasWithOneCircle,
+            objects: [
+              {
+                id: 'tree-1-top',
+                type: 'circle',
+                x: 100,
+                y: 100,
+                width: 80,
+                height: 80,
+                fill: '#22c55e',
+                text: undefined,
+                groupId: 'tree-1',
+                groupLabel: '树',
+              },
+              {
+                id: 'tree-2-top',
+                type: 'circle',
+                x: 300,
+                y: 100,
+                width: 80,
+                height: 80,
+                fill: '#22c55e',
+                text: undefined,
+                groupId: 'tree-2',
+                groupLabel: '树',
+              },
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({
+      status: 'invalid',
+      reason: 'ambiguous-target',
+    })
+  })
 })
 
 describe('createPlannerInput', () => {
@@ -576,6 +713,10 @@ describe('createPlannerInput', () => {
             height: 80,
             fill: '#3b82f6',
             text: undefined,
+            groupId: undefined,
+            groupLabel: undefined,
+            partLabel: undefined,
+            zIndex: undefined,
           },
         ],
       },
