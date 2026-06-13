@@ -49,6 +49,28 @@ export function PlannerPreview({
           it was executed.
         </p>
       ) : null}
+      {!isPlanning && previewResult.status === 'planned' && previewResult.correction ? (
+        <dl className="planner-preview__correction">
+          {previewResult.correction.correctedText ? (
+            <div>
+              <dt>Correction</dt>
+              <dd>{previewResult.correction.correctedText}</dd>
+            </div>
+          ) : null}
+          {previewResult.correction.interpretedIntent ? (
+            <div>
+              <dt>Intent</dt>
+              <dd>{previewResult.correction.interpretedIntent}</dd>
+            </div>
+          ) : null}
+          {previewResult.correction.confidence ? (
+            <div>
+              <dt>Confidence</dt>
+              <dd>{previewResult.correction.confidence}</dd>
+            </div>
+          ) : null}
+        </dl>
+      ) : null}
       {!isPlanning && previewResult.status === 'invalid' ? (
         <p>AI planner returned an invalid command: {previewResult.reason}</p>
       ) : null}

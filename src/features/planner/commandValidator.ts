@@ -12,7 +12,11 @@ import type {
 import { matchesCommandColor } from '../canvas/colorStyles'
 import { getSceneSpace, sceneGraphLimits } from '../canvas/sceneGraph'
 import { matchesTargetPosition } from '../canvas/targetMatching'
-import type { CommandPlannerInput, CommandPlannerResult } from './types'
+import type {
+  CommandCorrectionSummary,
+  CommandPlannerInput,
+  CommandPlannerResult,
+} from './types'
 
 const allowedActions = new Set([
   'create',
@@ -81,6 +85,7 @@ const allowedCanvasResizeAnchors = new Set<CanvasResizeAnchor>([
   'bottom-left',
   'bottom-right',
 ])
+const allowedCorrectionConfidence = new Set(['high', 'medium', 'low'])
 type ValidatorOptions = {
   canvas?: CommandPlannerInput['canvas']
 }
@@ -101,6 +106,40 @@ function normalizeSafeLabel(value: unknown, maxLength = 32) {
   const normalized = value.trim()
 
   return normalized ? normalized.slice(0, maxLength) : undefined
+}
+
+function normalizeCorrectionSummary(value: unknown): CommandCorrectionSummary | undefined {
+  if (!isRecord(value)) {
+    return undefined
+  }
+
+  const confidence =
+    typeof value.confidence === 'string' && allowedCorrectionConfidence.has(value.confidence)
+      ? (value.confidence as CommandCorrectionSummary['confidence'])
+      : undefined
+  const correction: CommandCorrectionSummary = {
+    correctedText: normalizeSafeLabel(value.correctedText, 120),
+    interpretedIntent: normalizeSafeLabel(value.interpretedIntent, 160),
+    explanation: normalizeSafeLabel(value.explanation, 180),
+    confidence,
+    shouldConfirm: typeof value.shouldConfirm === 'boolean' ? value.shouldConfirm : undefined,
+  }
+
+  return Object.values(correction).some((item) => item !== undefined)
+    ? correction
+    : undefined
+}
+
+function createPlannedResult(
+  command: Extract<CommandPlannerResult, { status: 'planned' }>['command'],
+  correction: CommandCorrectionSummary | undefined,
+): CommandPlannerResult {
+  return {
+    status: 'planned',
+    source: 'ai',
+    command,
+    correction,
+  }
 }
 
 function normalizeSceneBBox(value: unknown, shape: ShapeKind): SceneBBox | null {
@@ -507,6 +546,7 @@ export function validatePlannedCommand(
 
   const sourceText =
     typeof rawValue.sourceText === 'string' ? rawValue.sourceText : 'planner-output'
+  const correction = normalizeCorrectionSummary(rawValue.correction)
 
   if (rawValue.action === 'unknown') {
     return {
@@ -518,14 +558,13 @@ export function validatePlannedCommand(
   }
 
   if (rawValue.action === 'undo' || rawValue.action === 'redo' || rawValue.action === 'clear') {
-    return {
-      status: 'planned',
-      source: 'ai',
-      command: {
+    return createPlannedResult(
+      {
         action: rawValue.action,
         sourceText,
       },
-    }
+      correction,
+    )
   }
 
   if (rawValue.action === 'scene') {
@@ -569,16 +608,15 @@ export function validatePlannedCommand(
       }
     }
 
-    return {
-      status: 'planned',
-      source: 'ai',
-      command: {
+    return createPlannedResult(
+      {
         action: 'scene',
         title: normalizeSafeLabel(rawValue.title, 48),
         sourceText,
         elements: elements as SceneElement[],
       },
-    }
+      correction,
+    )
   }
 
   if (rawValue.action === 'resizeCanvas') {
@@ -601,10 +639,8 @@ export function validatePlannedCommand(
         }
       }
 
-      return {
-        status: 'planned',
-        source: 'ai',
-        command: {
+      return createPlannedResult(
+        {
           action: 'resizeCanvas',
           mode: 'absolute',
           width: rawValue.width,
@@ -612,7 +648,8 @@ export function validatePlannedCommand(
           anchor,
           sourceText,
         },
-      }
+        correction,
+      )
     }
 
     if (
@@ -626,10 +663,8 @@ export function validatePlannedCommand(
       }
     }
 
-    return {
-      status: 'planned',
-      source: 'ai',
-      command: {
+    return createPlannedResult(
+      {
         action: 'resizeCanvas',
         mode: 'relative',
         direction: rawValue.direction,
@@ -637,7 +672,8 @@ export function validatePlannedCommand(
         amount: typeof rawValue.amount === 'number' ? rawValue.amount : undefined,
         sourceText,
       },
-    }
+      correction,
+    )
   }
 
   if (rawValue.action === 'create') {
@@ -678,10 +714,8 @@ export function validatePlannedCommand(
       }
     }
 
-    return {
-      status: 'planned',
-      source: 'ai',
-      command: {
+    return createPlannedResult(
+      {
         action: 'create',
         shape: rawValue.shape as ShapeKind,
         color: rawValue.color as CommandColor | undefined,
@@ -690,7 +724,8 @@ export function validatePlannedCommand(
         text: typeof rawValue.text === 'string' ? rawValue.text : undefined,
         sourceText,
       },
-    }
+      correction,
+    )
   }
 
   if (rawValue.action === 'move') {
@@ -729,17 +764,16 @@ export function validatePlannedCommand(
         }
       }
 
-      return {
-        status: 'planned',
-        source: 'ai',
-        command: {
+      return createPlannedResult(
+        {
           action: 'move',
           target: normalizeEditableTarget(target, options),
           mode: 'absolute',
           position: rawValue.position as CommandPosition,
           sourceText,
         },
-      }
+        correction,
+      )
     }
 
     if (!allowedMoveDirections.has(rawValue.direction as string)) {
@@ -750,10 +784,8 @@ export function validatePlannedCommand(
       }
     }
 
-    return {
-      status: 'planned',
-      source: 'ai',
-      command: {
+    return createPlannedResult(
+      {
         action: 'move',
         target: normalizeEditableTarget(target, options),
         mode: 'relative',
@@ -761,7 +793,8 @@ export function validatePlannedCommand(
         distance: typeof rawValue.distance === 'number' ? rawValue.distance : 48,
         sourceText,
       },
-    }
+      correction,
+    )
   }
 
   if (rawValue.action === 'recolor') {
@@ -783,16 +816,15 @@ export function validatePlannedCommand(
       return targetError
     }
 
-    return {
-      status: 'planned',
-      source: 'ai',
-      command: {
+    return createPlannedResult(
+      {
         action: 'recolor',
         target: normalizeEditableTarget(target, options),
         color: rawValue.color as CommandColor,
         sourceText,
       },
-    }
+      correction,
+    )
   }
 
   if (rawValue.action === 'resize') {
@@ -817,16 +849,15 @@ export function validatePlannedCommand(
       return targetError
     }
 
-    return {
-      status: 'planned',
-      source: 'ai',
-      command: {
+    return createPlannedResult(
+      {
         action: 'resize',
         target: normalizeEditableTarget(target, options),
         direction: rawValue.direction as 'larger' | 'smaller',
         sourceText,
       },
-    }
+      correction,
+    )
   }
 
   if (rawValue.action === 'delete') {
@@ -848,15 +879,14 @@ export function validatePlannedCommand(
       return targetError
     }
 
-    return {
-      status: 'planned',
-      source: 'ai',
-      command: {
+    return createPlannedResult(
+      {
         action: 'delete',
         target: normalizeEditableTarget(target, options),
         sourceText,
       },
-    }
+      correction,
+    )
   }
 
   return {
