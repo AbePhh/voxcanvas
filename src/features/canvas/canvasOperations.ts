@@ -13,7 +13,6 @@ import { colorStyles } from './colorStyles'
 import {
   positionAnchors,
   resolveTargetSelection,
-  resolveTargetShape,
 } from './targetMatching'
 import { createShapesFromSceneCommand } from './sceneGraph'
 import type { CanvasSnapshot, CanvasState, ShapeObject } from './types'
@@ -116,36 +115,9 @@ function getShapePosition(
   }
 }
 
-function findTargetShape(state: CanvasState, target: CommandTarget) {
-  const result = resolveTargetShape(state, target)
-  return result.status === 'matched' ? result.shape : undefined
-}
-
 function findTargetShapes(state: CanvasState, target: CommandTarget) {
   const result = resolveTargetSelection(state, target)
   return result.status === 'matched' ? result.shapes : []
-}
-
-function updateTargetShape(
-  state: CanvasState,
-  target: CommandTarget,
-  updateShape: (shape: ShapeObject) => ShapeObject,
-) {
-  const targetShape = findTargetShape(state, target)
-
-  if (!targetShape) {
-    return state
-  }
-
-  return {
-    ...state,
-    future: [],
-    history: [...state.history, takeSnapshot(state)],
-    selectedId: targetShape.id,
-    shapes: state.shapes.map((shape) =>
-      shape.id === targetShape.id ? updateShape(shape) : shape,
-    ),
-  }
 }
 
 function updateTargetShapes(
@@ -194,6 +166,57 @@ function clampGroupDelta(
   return {
     x: Math.max(24 - bounds.x, Math.min(canvas.width - bounds.x - bounds.width - 24, delta.x)),
     y: Math.max(24 - bounds.y, Math.min(canvas.height - bounds.y - bounds.height - 24, delta.y)),
+  }
+}
+
+function getBoundsDeltaInsideCanvas(
+  canvas: Pick<CanvasState, 'width' | 'height'>,
+  bounds: ReturnType<typeof getShapesBounds>,
+) {
+  const minX = 24
+  const minY = 24
+  const maxX = canvas.width - bounds.width - 24
+  const maxY = canvas.height - bounds.height - 24
+
+  return {
+    x:
+      bounds.width > canvas.width - 48
+        ? minX - bounds.x
+        : Math.max(minX - bounds.x, Math.min(maxX - bounds.x, 0)),
+    y:
+      bounds.height > canvas.height - 48
+        ? minY - bounds.y
+        : Math.max(minY - bounds.y, Math.min(maxY - bounds.y, 0)),
+  }
+}
+
+function resizeShapeAroundBounds(
+  shape: ShapeObject,
+  bounds: ReturnType<typeof getShapesBounds>,
+  scale: number,
+) {
+  const boundsCenterX = bounds.x + bounds.width / 2
+  const boundsCenterY = bounds.y + bounds.height / 2
+  const shapeCenterX = shape.x + shape.width / 2
+  const shapeCenterY = shape.y + shape.height / 2
+  const nextWidth = Math.max(24, Math.round(shape.width * scale))
+  const nextHeight =
+    shape.type === 'line' ? Math.round(shape.height * scale) : Math.max(24, Math.round(shape.height * scale))
+  const nextCenterX = boundsCenterX + (shapeCenterX - boundsCenterX) * scale
+  const nextCenterY = boundsCenterY + (shapeCenterY - boundsCenterY) * scale
+
+  return {
+    ...shape,
+    width: nextWidth,
+    height: nextHeight,
+    strokeWidth: shape.strokeWidth
+      ? Math.max(1, Math.round(shape.strokeWidth * scale))
+      : undefined,
+    fontSize: shape.fontSize
+      ? Math.max(12, Math.round(shape.fontSize * scale))
+      : undefined,
+    x: Math.round(nextCenterX - nextWidth / 2),
+    y: Math.round(nextCenterY - nextHeight / 2),
   }
 }
 
@@ -364,23 +387,32 @@ export function applyResizeCommand(
   command: ResizeShapeCommand,
 ): CanvasState {
   const scale = command.direction === 'larger' ? 1.2 : 0.82
+  const targetShapes = findTargetShapes(state, command.target)
 
-  return updateTargetShape(state, command.target, (shape) => {
-    const nextWidth = Math.max(24, Math.round(shape.width * scale))
-    const nextHeight =
-      shape.type === 'line' ? shape.height : Math.max(24, Math.round(shape.height * scale))
-    const centerX = shape.x + shape.width / 2
-    const centerY = shape.y + shape.height / 2
+  if (targetShapes.length === 0) {
+    return state
+  }
 
-    return {
-      ...shape,
-      width: nextWidth,
-      height: nextHeight,
-      fontSize: shape.fontSize ? Math.max(12, Math.round(shape.fontSize * scale)) : undefined,
-      x: Math.round(centerX - nextWidth / 2),
-      y: Math.round(centerY - nextHeight / 2),
-    }
-  })
+  const bounds = getShapesBounds(targetShapes)
+  const resizedShapes = targetShapes.map((shape) =>
+    resizeShapeAroundBounds(shape, bounds, scale),
+  )
+  const resizedBounds = getShapesBounds(resizedShapes)
+  const correctionDelta = getBoundsDeltaInsideCanvas(state, resizedBounds)
+  const resizedShapeById = new Map(
+    resizedShapes.map((shape) => [
+      shape.id,
+      {
+        ...shape,
+        x: shape.x + correctionDelta.x,
+        y: shape.y + correctionDelta.y,
+      },
+    ]),
+  )
+
+  return updateTargetShapes(state, command.target, (shape) =>
+    resizedShapeById.get(shape.id) ?? shape,
+  )
 }
 
 export function applyResizeCanvasCommand(

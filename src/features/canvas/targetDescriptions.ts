@@ -185,13 +185,6 @@ function createTargetCandidates(
   }))
 }
 
-function createShapeCandidates(matches: ShapeObject[], canvasState: CanvasState) {
-  return matches.map((shape) => ({
-    id: shape.id,
-    label: describeShape(shape, canvasState),
-  }))
-}
-
 export function createTargetFeedback(
   command: ParsedCommand,
   canvasState: CanvasState,
@@ -205,16 +198,6 @@ export function createTargetFeedback(
   const result = resolveTargetSelection(canvasState, command.target)
 
   if (result.status === 'matched') {
-    if (command.action === 'resize' && result.shapes.length !== 1) {
-      const targetText = describeTarget(command.target)
-
-      return {
-        status: 'ambiguous',
-        message: `${targetText}包含 ${result.shapes.length} 个部件，当前请先说明要缩放的具体部件。`,
-        candidates: createShapeCandidates(result.shapes, canvasState),
-      }
-    }
-
     return {
       status: 'ok',
     }

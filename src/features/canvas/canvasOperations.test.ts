@@ -532,7 +532,7 @@ describe('canvasOperations', () => {
     expect(scene.shapes[0].x + scene.shapes[0].width).toBeLessThanOrEqual(baseCanvas.width)
   })
 
-  it('moves, recolors, and deletes semantic scene targets', () => {
+  it('moves, resizes, recolors, and deletes semantic scene targets', () => {
     const scene = applySceneCommand(baseCanvas, {
       action: 'scene',
       title: '房子和树',
@@ -592,7 +592,38 @@ describe('canvasOperations', () => {
       houseRoof?.x,
     )
 
-    const recolored = applyRecolorCommand(moved, {
+    const resized = applyResizeCommand(moved, {
+      action: 'resize',
+      target: { mode: 'semantic', groupLabel: '树' },
+      direction: 'larger',
+      sourceText: '把树放大',
+    })
+    const movedTreeShapes = moved.shapes.filter((shape) => shape.groupLabel === '树')
+    const resizedTreeShapes = resized.shapes.filter((shape) => shape.groupLabel === '树')
+    const movedTreeBounds = {
+      minX: Math.min(...movedTreeShapes.map((shape) => shape.x)),
+      maxX: Math.max(...movedTreeShapes.map((shape) => shape.x + shape.width)),
+      minY: Math.min(...movedTreeShapes.map((shape) => shape.y)),
+      maxY: Math.max(...movedTreeShapes.map((shape) => shape.y + shape.height)),
+    }
+    const resizedTreeBounds = {
+      minX: Math.min(...resizedTreeShapes.map((shape) => shape.x)),
+      maxX: Math.max(...resizedTreeShapes.map((shape) => shape.x + shape.width)),
+      minY: Math.min(...resizedTreeShapes.map((shape) => shape.y)),
+      maxY: Math.max(...resizedTreeShapes.map((shape) => shape.y + shape.height)),
+    }
+
+    expect(resizedTreeBounds.maxX - resizedTreeBounds.minX).toBeGreaterThan(
+      movedTreeBounds.maxX - movedTreeBounds.minX,
+    )
+    expect(resizedTreeBounds.maxY - resizedTreeBounds.minY).toBeGreaterThan(
+      movedTreeBounds.maxY - movedTreeBounds.minY,
+    )
+    expect(resized.shapes.find((shape) => shape.partLabel === '屋顶')?.x).toBe(
+      houseRoof?.x,
+    )
+
+    const recolored = applyRecolorCommand(resized, {
       action: 'recolor',
       target: { mode: 'semantic', groupLabel: '房子', partLabel: '屋顶' },
       color: 'blue',
@@ -615,5 +646,56 @@ describe('canvasOperations', () => {
     expect(applyUndoCommand(deleted).shapes.some((shape) => shape.groupLabel === '树')).toBe(
       true,
     )
+  })
+
+  it('keeps resized semantic groups inside the canvas bounds', () => {
+    const canvas: CanvasState = {
+      ...baseCanvas,
+      shapes: [
+        {
+          id: 'sun-core',
+          type: 'circle',
+          x: 835,
+          y: 24,
+          width: 100,
+          height: 100,
+          fill: '#facc15',
+          stroke: '#a16207',
+          groupId: 'sun-1',
+          groupLabel: '太阳',
+          partLabel: '主体',
+        },
+        {
+          id: 'sun-ray',
+          type: 'line',
+          x: 900,
+          y: 20,
+          width: 40,
+          height: 0,
+          fill: '#facc15',
+          stroke: '#a16207',
+          strokeWidth: 5,
+          groupId: 'sun-1',
+          groupLabel: '太阳',
+          partLabel: '光线',
+        },
+      ],
+      history: [],
+      future: [],
+    }
+
+    const resized = applyResizeCommand(canvas, {
+      action: 'resize',
+      target: { mode: 'semantic', groupLabel: '太阳' },
+      direction: 'larger',
+      sourceText: '把太阳放大',
+    })
+
+    resized.shapes.forEach((shape) => {
+      expect(shape.x).toBeGreaterThanOrEqual(24)
+      expect(shape.y).toBeGreaterThanOrEqual(24)
+      expect(shape.x + shape.width).toBeLessThanOrEqual(baseCanvas.width - 24)
+    })
+    expect(resized.history).toHaveLength(1)
   })
 })

@@ -88,7 +88,7 @@ function buildPlannerPrompt(input) {
     'Targets may include filters: { mode, id?, shape?, color?, position?, groupId?, groupLabel?, partLabel? }.',
     'Use target mode "semantic" when editing AI-generated scene graph objects or parts by their labels.',
     'Semantic target examples: { mode: "semantic", groupLabel: "房子" } edits the whole house group; { mode: "semantic", groupLabel: "房子", partLabel: "屋顶" } edits only the roof.',
-    'For resize commands, target one concrete object or one concrete semantic part. Do not resize an entire semantic group yet.',
+    'Resize may target one concrete object, one semantic part, or one unique semantic group. If multiple semantic groups share the same label, include groupId or return unknown so the UI can clarify.',
     '',
     'Rules:',
     '- Treat the user command as speech-recognition output. It may contain homophones, missing words, casual phrases, or minor recognition mistakes.',

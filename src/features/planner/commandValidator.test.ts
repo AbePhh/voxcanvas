@@ -599,6 +599,26 @@ describe('validatePlannedCommand', () => {
         },
       },
     })
+
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'resize',
+          target: { mode: 'semantic', groupLabel: '树' },
+          direction: 'larger',
+        },
+        { canvas: canvasWithSceneObjects },
+      ),
+    ).toMatchObject({
+      status: 'planned',
+      command: {
+        action: 'resize',
+        target: {
+          mode: 'semantic',
+          groupLabel: '树',
+        },
+      },
+    })
   })
 
   it('rejects ambiguous semantic scene targets', () => {
