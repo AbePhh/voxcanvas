@@ -15,7 +15,10 @@ import type { PendingExportClarification } from '../commands/exportClarification
 import { parseCommand } from '../commands/parseCommand'
 import type { ParsedCommand } from '../commands/types'
 import type { CanvasState } from '../canvas/types'
-import { shouldUseAiPlanner } from '../planner/aiPlanner'
+import {
+  canFallbackToLocalCommand,
+  getNormalizationDecision,
+} from '../planner/normalizationPolicy'
 import { PlannerPreview } from '../planner/PlannerPreview'
 import { useCommandPlanner } from '../planner/useCommandPlanner'
 import './VoiceInputPanel.css'
@@ -133,9 +136,9 @@ export function VoiceInputPanel({
       return
     }
 
+    const normalizationDecision = getNormalizationDecision(transcript, localCommand)
     const needsAiNormalization =
-      shouldUseAiPlanner(transcript, localCommand) ||
-      localTargetFeedback.status !== 'ok'
+      normalizationDecision.useAi || localTargetFeedback.status !== 'ok'
 
     if (!needsAiNormalization) {
       queueMicrotask(() => {
@@ -196,7 +199,7 @@ export function VoiceInputPanel({
         return
       }
 
-      if (localCommand.action !== 'unknown') {
+      if (canFallbackToLocalCommand(normalizationDecision, localCommand)) {
         queueMicrotask(() => {
           setClarificationFeedback(null)
           setPendingClarification(null)

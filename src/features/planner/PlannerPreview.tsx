@@ -58,6 +58,8 @@ export function PlannerPreview({
                     : undefined,
                 selectedId: previewResult.input.canvas.selectedId,
                 objectCount: previewResult.input.canvas.objects.length,
+                sceneSpace: previewResult.input.sceneSpace,
+                maxSceneElements: previewResult.input.sceneCapabilities.maxElements,
               }
             : previewResult,
           null,

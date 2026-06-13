@@ -1,5 +1,22 @@
 import type { ParsedCommand } from '../commands/types'
+import { getSceneSpace, sceneGraphLimits } from '../canvas/sceneGraph'
 import type { CanvasState, ShapeObject } from '../canvas/types'
+
+export const plannerSceneCapabilities = {
+  allowedShapes: ['circle', 'rect', 'triangle', 'line', 'text'],
+  allowedColors: [
+    'red',
+    'orange',
+    'yellow',
+    'green',
+    'blue',
+    'purple',
+    'black',
+    'white',
+    'gray',
+  ],
+  maxElements: sceneGraphLimits.maxElements,
+} as const
 
 export type PlannerCanvasObject = Pick<
   ShapeObject,
@@ -9,6 +26,13 @@ export type PlannerCanvasObject = Pick<
 export type CommandPlannerInput = {
   sourceText: string
   localCommand?: ParsedCommand
+  sceneSpace: {
+    width: number
+    height: number
+    origin: 'top-left'
+    unit: 'normalized'
+  }
+  sceneCapabilities: typeof plannerSceneCapabilities
   canvas: {
     width: number
     height: number
@@ -46,6 +70,12 @@ export function createPlannerInput(
   return {
     sourceText,
     localCommand,
+    sceneSpace: {
+      ...getSceneSpace(canvasState),
+      origin: 'top-left',
+      unit: 'normalized',
+    },
+    sceneCapabilities: plannerSceneCapabilities,
     canvas: {
       width: canvasState.width,
       height: canvasState.height,
