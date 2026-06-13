@@ -30,8 +30,14 @@ export function ScenePlanPreview({
       </div>
       <ul className="scene-plan__groups">
         {scenePlan.groups.map((group) => (
-          <li key={group.id}>
+          <li
+            key={group.id}
+            className={group.selected ? 'scene-plan__group is-selected' : 'scene-plan__group'}
+          >
             <span>{group.label}</span>
+            {group.referenceLabels?.length ? (
+              <em>{group.referenceLabels.slice(0, 4).join(' / ')}</em>
+            ) : null}
             <small>
               {group.elements
                 .map((element) => {

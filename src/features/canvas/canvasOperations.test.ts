@@ -512,6 +512,266 @@ describe('canvasOperations', () => {
     expect(undone.future).toHaveLength(1)
   })
 
+  it('assigns unique group ids when adding scene objects to an existing scene', () => {
+    const firstScene = applySceneCommand(baseCanvas, {
+      action: 'scene',
+      title: '第一棵树',
+      sourceText: '画一棵树',
+      elements: [
+        {
+          id: 'tree-trunk',
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树干',
+          shape: 'rect',
+          color: 'orange',
+          bbox: { x: 220, y: 330, width: 50, height: 150 },
+          zIndex: 10,
+        },
+        {
+          id: 'tree-crown',
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树冠',
+          shape: 'circle',
+          color: 'green',
+          bbox: { x: 170, y: 230, width: 150, height: 150 },
+          zIndex: 11,
+        },
+      ],
+    })
+    const secondScene = applySceneCommand(firstScene, {
+      action: 'scene',
+      title: '第二棵树',
+      sourceText: '再加一棵树',
+      elements: [
+        {
+          id: 'tree-trunk',
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树干',
+          shape: 'rect',
+          color: 'orange',
+          bbox: { x: 680, y: 330, width: 50, height: 150 },
+          zIndex: 10,
+        },
+        {
+          id: 'tree-crown',
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树冠',
+          shape: 'circle',
+          color: 'green',
+          bbox: { x: 630, y: 230, width: 150, height: 150 },
+          zIndex: 11,
+        },
+      ],
+    })
+
+    expect(firstScene.shapes.map((shape) => shape.groupId)).toEqual([
+      'tree-1',
+      'tree-1',
+    ])
+    expect(secondScene.shapes.map((shape) => shape.groupId)).toEqual([
+      'tree-1',
+      'tree-1',
+      'tree-2',
+      'tree-2',
+    ])
+    expect(secondScene.selectedGroupId).toBe('tree-2')
+  })
+
+  it('lets selected or last scene objects resolve to the whole newly added group', () => {
+    const scene = applySceneCommand(baseCanvas, {
+      action: 'scene',
+      title: '一棵树',
+      sourceText: '画一棵树',
+      elements: [
+        {
+          id: 'tree-trunk',
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树干',
+          shape: 'rect',
+          color: 'orange',
+          bbox: { x: 220, y: 330, width: 50, height: 150 },
+          zIndex: 10,
+        },
+        {
+          id: 'tree-crown',
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树冠',
+          shape: 'circle',
+          color: 'green',
+          bbox: { x: 170, y: 230, width: 150, height: 150 },
+          zIndex: 11,
+        },
+      ],
+    })
+    const movedSelectedGroup = applyMoveCommand(scene, {
+      action: 'move',
+      target: { mode: 'selected' },
+      mode: 'relative',
+      direction: 'right',
+      distance: 48,
+      sourceText: '把它往右移动一点',
+    })
+    const movedLastGroup = applyMoveCommand(scene, {
+      action: 'move',
+      target: { mode: 'last' },
+      mode: 'relative',
+      direction: 'right',
+      distance: 48,
+      sourceText: '把刚才新增的对象往右移动一点',
+    })
+
+    expect(movedSelectedGroup.shapes).toEqual(
+      scene.shapes.map((shape) => ({
+        ...shape,
+        x: shape.x + 48,
+      })),
+    )
+    expect(movedSelectedGroup.selectedGroupId).toBe('tree-1')
+    expect(movedLastGroup.shapes).toEqual(
+      scene.shapes.map((shape) => ({
+        ...shape,
+        x: shape.x + 48,
+      })),
+    )
+  })
+
+  it('uses the selected semantic group to disambiguate duplicate labels', () => {
+    const scene: CanvasState = {
+      ...baseCanvas,
+      selectedGroupId: 'tree-2',
+      shapes: [
+        {
+          id: 'tree-1-trunk',
+          type: 'rect',
+          x: 120,
+          y: 330,
+          width: 48,
+          height: 120,
+          fill: '#f97316',
+          stroke: '#9a3412',
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树干',
+        },
+        {
+          id: 'tree-2-trunk',
+          type: 'rect',
+          x: 320,
+          y: 330,
+          width: 48,
+          height: 120,
+          fill: '#f97316',
+          stroke: '#9a3412',
+          groupId: 'tree-2',
+          groupLabel: '树',
+          partLabel: '树干',
+        },
+      ],
+    }
+
+    const recolored = applyRecolorCommand(scene, {
+      action: 'recolor',
+      target: { mode: 'semantic', groupLabel: '树' },
+      color: 'red',
+      sourceText: '把树变成红色',
+    })
+    const ambiguousWithoutSelection = applyRecolorCommand(
+      {
+        ...scene,
+        selectedGroupId: undefined,
+      },
+      {
+        action: 'recolor',
+        target: { mode: 'semantic', groupLabel: '树' },
+        color: 'red',
+        sourceText: '把树变成红色',
+      },
+    )
+
+    expect(recolored.shapes[0].fill).toBe('#f97316')
+    expect(recolored.shapes[1].fill).toBe('#ef4444')
+    expect(recolored.selectedGroupId).toBe('tree-2')
+    expect(ambiguousWithoutSelection.shapes).toEqual(scene.shapes)
+  })
+
+  it('uses duplicate group reference labels to edit one semantic group', () => {
+    const scene: CanvasState = {
+      ...baseCanvas,
+      shapes: [
+        {
+          id: 'tree-1-trunk',
+          type: 'rect',
+          x: 120,
+          y: 330,
+          width: 48,
+          height: 120,
+          fill: '#f97316',
+          stroke: '#9a3412',
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树干',
+        },
+        {
+          id: 'tree-1-crown',
+          type: 'circle',
+          x: 84,
+          y: 240,
+          width: 120,
+          height: 120,
+          fill: '#22c55e',
+          stroke: '#166534',
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树冠',
+        },
+        {
+          id: 'tree-2-trunk',
+          type: 'rect',
+          x: 320,
+          y: 330,
+          width: 48,
+          height: 120,
+          fill: '#f97316',
+          stroke: '#9a3412',
+          groupId: 'tree-2',
+          groupLabel: '树',
+          partLabel: '树干',
+        },
+        {
+          id: 'tree-2-crown',
+          type: 'circle',
+          x: 284,
+          y: 240,
+          width: 120,
+          height: 120,
+          fill: '#22c55e',
+          stroke: '#166534',
+          groupId: 'tree-2',
+          groupLabel: '树',
+          partLabel: '树冠',
+        },
+      ],
+    }
+
+    const moved = applyMoveCommand(scene, {
+      action: 'move',
+      target: { mode: 'semantic', groupLabel: '第二棵树' },
+      mode: 'relative',
+      direction: 'right',
+      distance: 48,
+      sourceText: '把第二棵树往右移动一点',
+    })
+
+    expect(moved.shapes.map((shape) => shape.x)).toEqual([120, 84, 368, 332])
+    expect(moved.selectedGroupId).toBe('tree-2')
+  })
+
   it('fits slightly out-of-bounds scene elements into the canvas', () => {
     const scene = applySceneCommand(baseCanvas, {
       action: 'scene',

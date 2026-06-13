@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import './App.css'
 import {
   applyClearCommand,
@@ -15,14 +15,43 @@ import {
 import { CanvasSceneSummary } from './features/canvas/CanvasSceneSummary'
 import { DrawingCanvas } from './features/canvas/DrawingCanvas'
 import { sampleCanvas } from './features/canvas/sampleCanvas'
+import { createSemanticGroupSummaries } from './features/canvas/semanticGroups'
+import type { SemanticGroupSummary } from './features/canvas/semanticGroups'
+import type { ShapeObject } from './features/canvas/types'
 import type { ParsedCommand } from './features/commands/types'
 import { exportSvgElement } from './features/export/exportCanvas'
 import { VoiceInputPanel } from './features/voice/VoiceInputPanel'
+
+function getObjectDisplayName(
+  shape: ShapeObject,
+  semanticGroupById: Map<string, SemanticGroupSummary>,
+) {
+  if (!shape.groupLabel) {
+    return shape.id
+  }
+
+  const groupLabel = shape.groupId
+    ? semanticGroupById.get(shape.groupId)?.displayLabel
+    : undefined
+  const label = groupLabel ?? shape.groupLabel
+
+  return shape.partLabel ? `${label} / ${shape.partLabel}` : label
+}
 
 function App() {
   const canvasSvgRef = useRef<SVGSVGElement>(null)
   const [canvasState, setCanvasState] = useState(sampleCanvas)
   const [exportMessage, setExportMessage] = useState('')
+  const semanticGroupById = useMemo(
+    () =>
+      new Map(
+        createSemanticGroupSummaries(canvasState.shapes, {
+          selectedId: canvasState.selectedId,
+          selectedGroupId: canvasState.selectedGroupId,
+        }).map((group) => [group.id, group]),
+      ),
+    [canvasState.selectedGroupId, canvasState.selectedId, canvasState.shapes],
+  )
 
   const handleCommandParsed = useCallback((command: ParsedCommand) => {
     if (command.action === 'export') {
@@ -127,7 +156,12 @@ function App() {
             <ul>
               {canvasState.shapes.map((shape) => (
                 <li key={shape.id}>
-                  <span className="object-name">{shape.id}</span>
+                  <span className="object-name">
+                    {getObjectDisplayName(shape, semanticGroupById)}
+                    {shape.groupId ? (
+                      <small className="object-group">{shape.groupId}</small>
+                    ) : null}
+                  </span>
                   <span className="object-type">{shape.type}</span>
                 </li>
               ))}

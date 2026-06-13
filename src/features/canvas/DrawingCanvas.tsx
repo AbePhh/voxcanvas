@@ -128,7 +128,13 @@ export function DrawingCanvas({ state, svgRef }: DrawingCanvasProps) {
       </defs>
       <rect width={state.width} height={state.height} fill="#f8fafc" />
       <rect width={state.width} height={state.height} fill="url(#canvas-grid)" />
-      {state.shapes.map((shape) => renderShape(shape, shape.id === state.selectedId))}
+      {state.shapes.map((shape) =>
+        renderShape(
+          shape,
+          shape.id === state.selectedId ||
+            Boolean(state.selectedGroupId && shape.groupId === state.selectedGroupId),
+        ),
+      )}
     </svg>
   )
 }

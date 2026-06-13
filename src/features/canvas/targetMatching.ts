@@ -1,5 +1,9 @@
 import type { CommandPosition, CommandTarget } from '../commands/types'
 import { matchesCommandColor } from './colorStyles'
+import {
+  createSemanticGroupSummaries,
+  findSemanticGroupsByReference,
+} from './semanticGroups'
 import type { CanvasState, ShapeObject } from './types'
 
 export const positionAnchors: Record<CommandPosition, { x: number; y: number }> = {
@@ -99,12 +103,42 @@ export function matchesTargetFilters(
   return true
 }
 
+function normalizeSemanticTargetReference(
+  state: CanvasState,
+  target: CommandTarget,
+): CommandTarget {
+  if (target.mode !== 'semantic' || target.groupId || !target.groupLabel) {
+    return target
+  }
+
+  const groups = createSemanticGroupSummaries(state.shapes, {
+    selectedId: state.selectedId,
+    selectedGroupId: state.selectedGroupId,
+  })
+  const matchingGroups = findSemanticGroupsByReference(groups, target.groupLabel)
+  const selectedMatch = matchingGroups.find(
+    (group) => group.groupId && group.groupId === state.selectedGroupId,
+  )
+  const matchedGroup = selectedMatch ?? (matchingGroups.length === 1 ? matchingGroups[0] : null)
+
+  if (!matchedGroup?.groupId) {
+    return target
+  }
+
+  return {
+    ...target,
+    groupId: matchedGroup.groupId,
+    groupLabel: matchedGroup.groupLabel,
+  }
+}
+
 function resolveSemanticSelection(
   state: CanvasState,
   target: CommandTarget,
 ): TargetSelectionResult {
+  const normalizedTarget = normalizeSemanticTargetReference(state, target)
   const matchedShapes = state.shapes.filter((shape) =>
-    matchesTargetFilters(shape, target, state),
+    matchesTargetFilters(shape, normalizedTarget, state),
   )
 
   if (matchedShapes.length === 0) {
@@ -114,7 +148,7 @@ function resolveSemanticSelection(
     }
   }
 
-  if (target.id) {
+  if (normalizedTarget.id) {
     return matchedShapes.length === 1
       ? {
           status: 'matched',
@@ -127,10 +161,24 @@ function resolveSemanticSelection(
         }
   }
 
+  if (!normalizedTarget.groupId && state.selectedGroupId) {
+    const selectedGroupShapes = matchedShapes.filter(
+      (shape) => shape.groupId === state.selectedGroupId,
+    )
+
+    if (selectedGroupShapes.length > 0) {
+      return {
+        status: 'matched',
+        shapes: selectedGroupShapes,
+        matches: selectedGroupShapes,
+      }
+    }
+  }
+
   const groupKeys = new Set(
     matchedShapes.map((shape) => {
       const groupKey = shape.groupId ?? shape.groupLabel ?? shape.id
-      const partKey = target.partLabel ? shape.partLabel ?? shape.id : ''
+      const partKey = normalizedTarget.partLabel ? shape.partLabel ?? shape.id : ''
 
       return `${groupKey}:${partKey}`
     }),
@@ -150,12 +198,85 @@ function resolveSemanticSelection(
   }
 }
 
+function canExpandSemanticReference(target: CommandTarget) {
+  return !target.id && !target.shape && !target.color && !target.position && !target.partLabel
+}
+
+function getSemanticGroupShapes(state: CanvasState, groupId: string, target: CommandTarget) {
+  return state.shapes.filter(
+    (shape) =>
+      shape.groupId === groupId &&
+      matchesTargetFilters(shape, target, state),
+  )
+}
+
+function resolveSelectedSemanticGroup(
+  state: CanvasState,
+  target: CommandTarget,
+): TargetSelectionResult | null {
+  if (
+    target.mode !== 'selected' ||
+    !state.selectedGroupId ||
+    !canExpandSemanticReference(target)
+  ) {
+    return null
+  }
+
+  const groupShapes = getSemanticGroupShapes(state, state.selectedGroupId, target)
+
+  if (groupShapes.length === 0) {
+    return null
+  }
+
+  return {
+    status: 'matched',
+    shapes: groupShapes,
+    matches: groupShapes,
+  }
+}
+
+function resolveLastSemanticGroup(
+  state: CanvasState,
+  target: CommandTarget,
+): TargetSelectionResult | null {
+  if (target.mode !== 'last' || !canExpandSemanticReference(target)) {
+    return null
+  }
+
+  const latestMatch = [...state.shapes]
+    .reverse()
+    .find((shape) => matchesTargetFilters(shape, target, state))
+
+  if (!latestMatch?.groupId) {
+    return null
+  }
+
+  const groupShapes = getSemanticGroupShapes(state, latestMatch.groupId, target)
+
+  if (groupShapes.length === 0) {
+    return null
+  }
+
+  return {
+    status: 'matched',
+    shapes: groupShapes,
+    matches: groupShapes,
+  }
+}
+
 export function resolveTargetSelection(
   state: CanvasState,
   target: CommandTarget,
 ): TargetSelectionResult {
   if (target.mode === 'semantic') {
     return resolveSemanticSelection(state, target)
+  }
+
+  const semanticReference =
+    resolveSelectedSemanticGroup(state, target) ?? resolveLastSemanticGroup(state, target)
+
+  if (semanticReference) {
+    return semanticReference
   }
 
   const result = resolveTargetShape(state, target)

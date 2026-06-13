@@ -55,6 +55,8 @@ describe('scene plan summaries', () => {
         {
           id: 'house-1',
           label: '房子',
+          referenceLabels: expect.arrayContaining(['house-1', '房子']),
+          selected: false,
           elements: [
             expect.objectContaining({
               id: 'house-wall',
@@ -71,6 +73,8 @@ describe('scene plan summaries', () => {
         {
           id: 'sun-1',
           label: '太阳',
+          referenceLabels: expect.arrayContaining(['sun-1', '太阳']),
+          selected: false,
           elements: [
             expect.objectContaining({
               id: 'sun',
@@ -151,6 +155,8 @@ describe('scene plan summaries', () => {
         {
           id: 'house-1',
           label: '房子',
+          referenceLabels: expect.arrayContaining(['house-1', '房子']),
+          selected: false,
           elements: [
             expect.objectContaining({
               id: 'scene-wall',
@@ -218,5 +224,53 @@ describe('scene plan summaries', () => {
     )
 
     expect(createScenePlanSummaryFromShapes({ ...canvas, shapes: [] })).toBeNull()
+  })
+
+  it('adds stable references to duplicate semantic group labels', () => {
+    const summary = createScenePlanSummaryFromShapes({
+      width: 960,
+      height: 560,
+      shapes: [
+        {
+          id: 'tree-1-trunk',
+          type: 'rect',
+          x: 120,
+          y: 320,
+          width: 40,
+          height: 100,
+          fill: colorStyles.orange.fill,
+          stroke: colorStyles.orange.stroke,
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树干',
+        },
+        {
+          id: 'tree-2-trunk',
+          type: 'rect',
+          x: 320,
+          y: 320,
+          width: 40,
+          height: 100,
+          fill: colorStyles.orange.fill,
+          stroke: colorStyles.orange.stroke,
+          groupId: 'tree-2',
+          groupLabel: '树',
+          partLabel: '树干',
+        },
+      ],
+    })
+
+    expect(summary?.groups).toEqual([
+      expect.objectContaining({
+        id: 'tree-1',
+        label: '树 1',
+        referenceLabels: expect.arrayContaining(['tree-1', '树 1', '第一棵树']),
+      }),
+      expect.objectContaining({
+        id: 'tree-2',
+        label: '树 2',
+        referenceLabels: expect.arrayContaining(['tree-2', '树 2', '第二棵树']),
+      }),
+    ])
   })
 })

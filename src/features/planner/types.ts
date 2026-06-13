@@ -1,5 +1,6 @@
 import type { ParsedCommand } from '../commands/types'
 import { getSceneSpace, sceneGraphLimits } from '../canvas/sceneGraph'
+import { createSemanticGroupSummaries } from '../canvas/semanticGroups'
 import type { CanvasState, ShapeObject } from '../canvas/types'
 
 export const plannerSceneCapabilities = {
@@ -48,6 +49,8 @@ export type CommandPlannerInput = {
     width: number
     height: number
     selectedId?: string
+    selectedGroupId?: string
+    semanticGroups?: ReturnType<typeof createSemanticGroupSummaries>
     objects: PlannerCanvasObject[]
   }
 }
@@ -91,6 +94,11 @@ export function createPlannerInput(
       width: canvasState.width,
       height: canvasState.height,
       selectedId: canvasState.selectedId,
+      selectedGroupId: canvasState.selectedGroupId,
+      semanticGroups: createSemanticGroupSummaries(canvasState.shapes, {
+        selectedId: canvasState.selectedId,
+        selectedGroupId: canvasState.selectedGroupId,
+      }),
       objects: canvasState.shapes.map((shape) => ({
         id: shape.id,
         type: shape.type,

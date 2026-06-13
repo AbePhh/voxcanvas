@@ -24,6 +24,7 @@ export type CanvasSnapshot = {
   height: number
   shapes: ShapeObject[]
   selectedId?: string
+  selectedGroupId?: string
 }
 
 export type CanvasState = {
@@ -31,6 +32,7 @@ export type CanvasState = {
   height: number
   shapes: ShapeObject[]
   selectedId?: string
+  selectedGroupId?: string
   history: CanvasSnapshot[]
   future: CanvasSnapshot[]
 }

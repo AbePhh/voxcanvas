@@ -28,11 +28,25 @@
   list-style: none;
 }
 
-.scene-plan__groups li {
+.scene-plan__group {
   display: grid;
   gap: 2px;
+  border: 1px solid transparent;
+  padding: 6px;
   color: #14532d;
   font-size: 13px;
+}
+
+.scene-plan__group.is-selected {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.scene-plan__group em {
+  color: #2563eb;
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.35;
 }
 
 .scene-plan__groups small {
