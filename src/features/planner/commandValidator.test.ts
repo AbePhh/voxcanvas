@@ -194,6 +194,165 @@ describe('validatePlannedCommand', () => {
     })
   })
 
+  it('accepts a valid scene graph command', () => {
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'scene',
+          title: '房子和太阳',
+          sourceText: '画一间房子和太阳',
+          elements: [
+            {
+              id: 'house-wall',
+              groupId: 'house-1',
+              groupLabel: '房子',
+              partLabel: '墙体',
+              shape: 'rect',
+              color: 'orange',
+              bbox: { x: 380, y: 330, width: 240, height: 160 },
+              zIndex: 10,
+            },
+            {
+              id: 'sun',
+              groupId: 'sun-1',
+              groupLabel: '太阳',
+              shape: 'circle',
+              color: 'yellow',
+              bbox: { x: 760, y: 60, width: 120, height: 120 },
+              zIndex: 20,
+            },
+          ],
+        },
+        { canvas: canvasWithOneCircle },
+      ),
+    ).toMatchObject({
+      status: 'planned',
+      command: {
+        action: 'scene',
+        title: '房子和太阳',
+        elements: [
+          {
+            id: 'house-wall',
+            groupId: 'house-1',
+            groupLabel: '房子',
+            partLabel: '墙体',
+            shape: 'rect',
+            color: 'orange',
+          },
+          {
+            id: 'sun',
+            groupId: 'sun-1',
+            shape: 'circle',
+            color: 'yellow',
+          },
+        ],
+      },
+    })
+  })
+
+  it('rejects invalid scene graph commands', () => {
+    expect(
+      validatePlannedCommand({
+        action: 'scene',
+        elements: [],
+      }),
+    ).toMatchObject({
+      status: 'invalid',
+      reason: 'missing-canvas-context',
+    })
+
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'scene',
+          elements: [],
+        },
+        { canvas: canvasWithOneCircle },
+      ),
+    ).toMatchObject({
+      status: 'invalid',
+      reason: 'invalid-scene-element-count',
+    })
+
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'scene',
+          elements: Array.from({ length: 25 }, (_, index) => ({
+            id: `shape-${index}`,
+            shape: 'circle',
+            color: 'blue',
+            bbox: { x: 20, y: 20, width: 40, height: 40 },
+          })),
+        },
+        { canvas: canvasWithOneCircle },
+      ),
+    ).toMatchObject({
+      status: 'invalid',
+      reason: 'invalid-scene-element-count',
+    })
+
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'scene',
+          elements: [
+            {
+              id: 'bad-shape',
+              shape: 'star',
+              color: 'blue',
+              bbox: { x: 20, y: 20, width: 40, height: 40 },
+            },
+          ],
+        },
+        { canvas: canvasWithOneCircle },
+      ),
+    ).toMatchObject({
+      status: 'invalid',
+      reason: 'invalid-scene-element',
+    })
+
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'scene',
+          elements: [
+            {
+              id: 'bad-bbox',
+              shape: 'circle',
+              color: 'blue',
+              bbox: { x: Number.NaN, y: 20, width: 40, height: 40 },
+            },
+          ],
+        },
+        { canvas: canvasWithOneCircle },
+      ),
+    ).toMatchObject({
+      status: 'invalid',
+      reason: 'invalid-scene-element',
+    })
+
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'scene',
+          elements: [
+            {
+              id: 'wild-bbox',
+              shape: 'circle',
+              color: 'blue',
+              bbox: { x: 5000, y: 20, width: 40, height: 40 },
+            },
+          ],
+        },
+        { canvas: canvasWithOneCircle },
+      ),
+    ).toMatchObject({
+      status: 'invalid',
+      reason: 'invalid-scene-element',
+    })
+  })
+
   it('requires canvas context for dangerous edit commands', () => {
     expect(
       validatePlannedCommand({

@@ -6,8 +6,11 @@ import type {
   CommandPosition,
   CommandSize,
   CommandTarget,
+  SceneBBox,
+  SceneElement,
 } from '../commands/types'
 import { matchesCommandColor } from '../canvas/colorStyles'
+import { getSceneSpace, sceneGraphLimits } from '../canvas/sceneGraph'
 import { matchesTargetPosition } from '../canvas/targetMatching'
 import type { CommandPlannerInput, CommandPlannerResult } from './types'
 
@@ -22,6 +25,7 @@ const allowedActions = new Set([
   'clear',
   'unknown',
   'resizeCanvas',
+  'scene',
 ])
 const allowedShapes = new Set<ShapeKind>(['circle', 'rect', 'triangle', 'line', 'text'])
 const allowedColors = new Set<CommandColor>([
@@ -76,6 +80,115 @@ type ValidatorOptions = {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
+}
+
+function normalizeSafeLabel(value: unknown, maxLength = 32) {
+  if (typeof value !== 'string') {
+    return undefined
+  }
+
+  const normalized = value.trim()
+
+  return normalized ? normalized.slice(0, maxLength) : undefined
+}
+
+function normalizeSceneBBox(value: unknown): SceneBBox | null {
+  if (!isRecord(value)) {
+    return null
+  }
+
+  if (
+    !isFiniteNumber(value.x) ||
+    !isFiniteNumber(value.y) ||
+    !isFiniteNumber(value.width) ||
+    !isFiniteNumber(value.height)
+  ) {
+    return null
+  }
+
+  if (
+    value.width < sceneGraphLimits.minSize ||
+    value.height < sceneGraphLimits.minSize
+  ) {
+    return null
+  }
+
+  return {
+    x: value.x,
+    y: value.y,
+    width: value.width,
+    height: value.height,
+  }
+}
+
+function isSceneBBoxWildlyOutOfRange(
+  bbox: SceneBBox,
+  sceneSpace: ReturnType<typeof getSceneSpace>,
+) {
+  const overflowLimit =
+    Math.max(sceneSpace.width, sceneSpace.height) *
+    sceneGraphLimits.maxOverflowRatio
+
+  return (
+    bbox.x < -overflowLimit ||
+    bbox.y < -overflowLimit ||
+    bbox.x + bbox.width > sceneSpace.width + overflowLimit ||
+    bbox.y + bbox.height > sceneSpace.height + overflowLimit
+  )
+}
+
+function normalizeSceneElement(
+  value: unknown,
+  sceneSpace: ReturnType<typeof getSceneSpace>,
+): SceneElement | null {
+  if (!isRecord(value)) {
+    return null
+  }
+
+  if (typeof value.id !== 'string' || value.id.trim().length === 0) {
+    return null
+  }
+
+  if (!allowedShapes.has(value.shape as ShapeKind)) {
+    return null
+  }
+
+  if (!allowedColors.has(value.color as CommandColor)) {
+    return null
+  }
+
+  const bbox = normalizeSceneBBox(value.bbox)
+
+  if (!bbox || isSceneBBoxWildlyOutOfRange(bbox, sceneSpace)) {
+    return null
+  }
+
+  if (value.zIndex !== undefined && !isFiniteNumber(value.zIndex)) {
+    return null
+  }
+
+  if (value.text !== undefined && typeof value.text !== 'string') {
+    return null
+  }
+
+  return {
+    id: value.id.trim().slice(0, 48),
+    groupId: normalizeSafeLabel(value.groupId, 48),
+    groupLabel: normalizeSafeLabel(value.groupLabel),
+    partLabel: normalizeSafeLabel(value.partLabel),
+    shape: value.shape as ShapeKind,
+    color: value.color as CommandColor,
+    bbox,
+    zIndex: value.zIndex,
+    text:
+      typeof value.text === 'string'
+        ? value.text.trim().slice(0, sceneGraphLimits.maxTextLength)
+        : undefined,
+  }
 }
 
 function isCanvasResizeDirection(value: unknown): value is CanvasResizeDirection {
@@ -240,6 +353,59 @@ export function validatePlannedCommand(
       command: {
         action: rawValue.action,
         sourceText,
+      },
+    }
+  }
+
+  if (rawValue.action === 'scene') {
+    if (!options.canvas) {
+      return {
+        status: 'invalid',
+        reason: 'missing-canvas-context',
+        rawValue,
+      }
+    }
+
+    if (!Array.isArray(rawValue.elements)) {
+      return {
+        status: 'invalid',
+        reason: 'invalid-scene-elements',
+        rawValue,
+      }
+    }
+
+    if (
+      rawValue.elements.length < 1 ||
+      rawValue.elements.length > sceneGraphLimits.maxElements
+    ) {
+      return {
+        status: 'invalid',
+        reason: 'invalid-scene-element-count',
+        rawValue,
+      }
+    }
+
+    const sceneSpace = getSceneSpace(options.canvas)
+    const elements = rawValue.elements.map((element) =>
+      normalizeSceneElement(element, sceneSpace),
+    )
+
+    if (elements.some((element) => element === null)) {
+      return {
+        status: 'invalid',
+        reason: 'invalid-scene-element',
+        rawValue,
+      }
+    }
+
+    return {
+      status: 'planned',
+      source: 'ai',
+      command: {
+        action: 'scene',
+        title: normalizeSafeLabel(rawValue.title, 48),
+        sourceText,
+        elements: elements as SceneElement[],
       },
     }
   }

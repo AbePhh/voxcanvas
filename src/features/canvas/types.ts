@@ -13,6 +13,10 @@ export type ShapeObject = {
   strokeWidth?: number
   text?: string
   fontSize?: number
+  groupId?: string
+  groupLabel?: string
+  partLabel?: string
+  zIndex?: number
 }
 
 export type CanvasSnapshot = {

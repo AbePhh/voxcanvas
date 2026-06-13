@@ -51,6 +51,12 @@ function formatCommand(command: ParsedCommand) {
       : `Resize canvas ${command.direction} from ${command.anchor ?? 'center'}`
   }
 
+  if (command.action === 'scene') {
+    return `Create scene${command.title ? ` "${command.title}"` : ''} with ${
+      command.elements.length
+    } elements`
+  }
+
   return command.action
 }
 
