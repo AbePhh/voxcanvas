@@ -381,7 +381,7 @@ function parseCreateCommand(text: string, sourceText: string): ParsedCommand {
   const shape = findDictionaryMatch<ShapeKind>(text, shapeKeywords)
 
   if (!shape) {
-    return createUnknown('missing-shape', sourceText)
+    return createUnknown('planner-required-scene-or-shape', sourceText)
   }
 
   if (shape === 'text') {

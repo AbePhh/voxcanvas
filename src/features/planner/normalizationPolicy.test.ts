@@ -25,12 +25,12 @@ describe('getNormalizationDecision', () => {
     expect(
       getNormalizationDecision('画一个漂亮的生日派对', {
         action: 'unknown',
-        reason: 'missing-shape',
+        reason: 'planner-required-scene-or-shape',
         sourceText: '画一个漂亮的生日派对',
       }),
     ).toEqual({
       useAi: true,
-      reason: 'missing-shape',
+      reason: 'planner-required-scene-or-shape',
     })
   })
 
@@ -75,7 +75,7 @@ describe('getNormalizationDecision', () => {
     expect(
       getNormalizationDecision('画一间房子，旁边有一棵树，右上角有太阳', {
         action: 'unknown',
-        reason: 'missing-shape',
+        reason: 'planner-required-scene-or-shape',
         sourceText: '画一间房子，旁边有一棵树，右上角有太阳',
       }),
     ).toEqual({

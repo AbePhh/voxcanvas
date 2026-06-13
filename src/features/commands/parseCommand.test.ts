@@ -121,7 +121,41 @@ describe('parseCommand', () => {
 
     expect(parseCommand('画一个漂亮的东西')).toMatchObject({
       action: 'unknown',
-      reason: 'missing-shape',
+      reason: 'planner-required-scene-or-shape',
+    })
+  })
+
+  it('does not locally create semantic objects as basic shapes', () => {
+    expect(parseCommand('生成一个房子')).toMatchObject({
+      action: 'unknown',
+      reason: 'planner-required-scene-or-shape',
+    })
+
+    expect(parseCommand('画一个太阳')).toMatchObject({
+      action: 'unknown',
+      reason: 'planner-required-scene-or-shape',
+    })
+
+    expect(parseCommand('添加一个门')).toMatchObject({
+      action: 'unknown',
+      reason: 'planner-required-scene-or-shape',
+    })
+
+    expect(parseCommand('画一个屋顶')).toMatchObject({
+      action: 'unknown',
+      reason: 'planner-required-scene-or-shape',
+    })
+  })
+
+  it('does not locally treat semantic edit targets as basic shapes', () => {
+    expect(parseCommand('把太阳放大')).toMatchObject({
+      action: 'unknown',
+      reason: 'unsafe-resize-target',
+    })
+
+    expect(parseCommand('把房子的屋顶改成蓝色')).toMatchObject({
+      action: 'unknown',
+      reason: 'unsafe-recolor-target',
     })
   })
 

@@ -15,7 +15,7 @@ describe('shouldUseAiPlanner', () => {
     expect(
       shouldUseAiPlanner('画一个漂亮的生日派对', {
         action: 'unknown',
-        reason: 'missing-shape',
+        reason: 'planner-required-scene-or-shape',
         sourceText: '画一个漂亮的生日派对',
       }),
     ).toBe(true)
