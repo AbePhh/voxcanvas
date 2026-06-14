@@ -30,17 +30,27 @@ export function CommandFeedbackPanel({ feedback }: CommandFeedbackPanelProps) {
   return (
     <section className="command-feedback" aria-label="Command feedback">
       <div className="command-feedback__header">
-        <h3>Understanding</h3>
+        <div>
+          <h3>{feedback.title}</h3>
+          <p>{sourceLabels[feedback.source]}</p>
+        </div>
         <span>{statusLabels[feedback.status]}</span>
       </div>
 
       <p className="command-feedback__summary">{feedback.summary}</p>
 
-      <dl>
-        <div>
-          <dt>Source</dt>
-          <dd>{sourceLabels[feedback.source]}</dd>
-        </div>
+      {feedback.metrics?.length ? (
+        <dl className="command-feedback__metrics">
+          {feedback.metrics.map((metric) => (
+            <div key={`${metric.label}-${metric.value}`}>
+              <dt>{metric.label}</dt>
+              <dd>{metric.value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
+
+      <dl className="command-feedback__understanding">
         {feedback.correction?.confidence ? (
           <div>
             <dt>Confidence</dt>
@@ -68,7 +78,7 @@ export function CommandFeedbackPanel({ feedback }: CommandFeedbackPanelProps) {
       </dl>
 
       {feedback.details.length > 0 ? (
-        <ul>
+        <ul className="command-feedback__details">
           {feedback.details.map((detail) => (
             <li key={detail}>{detail}</li>
           ))}

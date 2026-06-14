@@ -1,7 +1,7 @@
 .command-feedback {
-  border: 1px solid #bfdbfe;
-  padding: 12px;
-  background: #eff6ff;
+  border: 1px solid #b7c7e6;
+  padding: 14px;
+  background: #f5f8ff;
 }
 
 .command-feedback.is-empty {
@@ -19,15 +19,24 @@
 
 .command-feedback h3 {
   margin: 0;
-  color: #1e3a8a;
+  color: #0f172a;
   font-size: 14px;
   line-height: 1.2;
   letter-spacing: 0;
 }
 
+.command-feedback__header p {
+  margin: 3px 0 0;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
 .command-feedback__header span {
-  border: 1px solid #93c5fd;
-  padding: 3px 6px;
+  border: 1px solid #9ab7e6;
+  padding: 4px 7px;
   color: #1d4ed8;
   background: #ffffff;
   font-size: 11px;
@@ -38,7 +47,7 @@
 
 .command-feedback p {
   margin: 0;
-  color: #1e3a8a;
+  color: #1e293b;
   font-size: 13px;
   line-height: 1.45;
 }
@@ -47,35 +56,73 @@
   font-weight: 700;
 }
 
-.command-feedback dl {
+.command-feedback__metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0 0;
+}
+
+.command-feedback__metrics div {
+  min-width: 0;
+  border: 1px solid #d7e3f7;
+  padding: 8px;
+  background: #ffffff;
+}
+
+.command-feedback__metrics dt,
+.command-feedback__metrics dd {
+  margin: 0;
+  line-height: 1.25;
+}
+
+.command-feedback__metrics dt {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.command-feedback__metrics dd {
+  overflow-wrap: anywhere;
+  margin-top: 3px;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.command-feedback__understanding {
   display: grid;
   gap: 6px;
   margin: 10px 0 0;
 }
 
-.command-feedback dl div {
+.command-feedback__understanding:empty {
+  display: none;
+}
+
+.command-feedback__understanding div {
   display: grid;
-  grid-template-columns: 78px minmax(0, 1fr);
+  grid-template-columns: 76px minmax(0, 1fr);
   gap: 8px;
 }
 
-.command-feedback dt,
-.command-feedback dd {
+.command-feedback__understanding dt,
+.command-feedback__understanding dd {
   margin: 0;
   font-size: 12px;
   line-height: 1.35;
 }
 
-.command-feedback dt {
+.command-feedback__understanding dt {
   color: #1d4ed8;
   font-weight: 800;
 }
 
-.command-feedback dd {
+.command-feedback__understanding dd {
   color: #1e3a8a;
 }
 
-.command-feedback ul {
+.command-feedback__details {
   display: grid;
   gap: 5px;
   margin: 10px 0 0;
@@ -83,10 +130,10 @@
   list-style: none;
 }
 
-.command-feedback li {
-  border: 1px solid #bfdbfe;
+.command-feedback__details li {
+  border: 1px solid #d7e3f7;
   padding: 6px 7px;
-  color: #1e3a8a;
+  color: #334155;
   background: #ffffff;
   font-size: 12px;
   line-height: 1.35;

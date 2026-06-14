@@ -8,6 +8,17 @@ export type CommandExecutionFeedback = {
   title: string
   summary: string
   details: string[]
+  metrics?: CommandFeedbackMetric[]
+  correction?: CommandCorrectionSummary
+}
+
+export type CommandFeedbackMetric = {
+  label: string
+  value: string
+}
+
+export type CommandExecutionFeedbackContext = {
+  source: CommandExecutionFeedback['source']
   correction?: CommandCorrectionSummary
 }
 

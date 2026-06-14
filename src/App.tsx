@@ -18,6 +18,8 @@ import { sampleCanvas } from './features/canvas/sampleCanvas'
 import { createSemanticGroupSummaries } from './features/canvas/semanticGroups'
 import type { SemanticGroupSummary } from './features/canvas/semanticGroups'
 import type { ShapeObject } from './features/canvas/types'
+import type { CommandExecutionFeedbackContext } from './features/commands/commandFeedback'
+import { createPreciseExecutionFeedback } from './features/commands/executionFeedback'
 import type { ParsedCommand } from './features/commands/types'
 import { exportSvgElement } from './features/export/exportCanvas'
 import { VoiceInputPanel } from './features/voice/VoiceInputPanel'
@@ -42,6 +44,8 @@ function App() {
   const canvasSvgRef = useRef<SVGSVGElement>(null)
   const [canvasState, setCanvasState] = useState(sampleCanvas)
   const [exportMessage, setExportMessage] = useState('')
+  const [executionFeedback, setExecutionFeedback] =
+    useState<ReturnType<typeof createPreciseExecutionFeedback> | null>(null)
   const semanticGroupById = useMemo(
     () =>
       new Map(
@@ -53,7 +57,10 @@ function App() {
     [canvasState.selectedGroupId, canvasState.selectedId, canvasState.shapes],
   )
 
-  const handleCommandParsed = useCallback((command: ParsedCommand) => {
+  const handleCommandParsed = useCallback((
+    command: ParsedCommand,
+    feedbackContext?: CommandExecutionFeedbackContext,
+  ) => {
     if (command.action === 'export') {
       const svgElement = canvasSvgRef.current
 
@@ -85,32 +92,51 @@ function App() {
     }
 
     setCanvasState((current) => {
+      let nextState: typeof current
+
       switch (command.action) {
         case 'create':
-          return applyCreateCommand(current, command)
+          nextState = applyCreateCommand(current, command)
+          break
         case 'delete':
-          return applyDeleteCommand(current, command)
+          nextState = applyDeleteCommand(current, command)
+          break
         case 'move':
-          return applyMoveCommand(current, command)
+          nextState = applyMoveCommand(current, command)
+          break
         case 'recolor':
-          return applyRecolorCommand(current, command)
+          nextState = applyRecolorCommand(current, command)
+          break
         case 'resize':
-          return applyResizeCommand(current, command)
+          nextState = applyResizeCommand(current, command)
+          break
         case 'resizeCanvas':
-          return applyResizeCanvasCommand(current, command)
+          nextState = applyResizeCanvasCommand(current, command)
+          break
         case 'scene':
-          return applySceneCommand(current, command)
+          nextState = applySceneCommand(current, command)
+          break
         case 'clear':
-          return applyClearCommand(current)
+          nextState = applyClearCommand(current)
+          break
         case 'undo':
-          return applyUndoCommand(current)
+          nextState = applyUndoCommand(current)
+          break
         case 'redo':
-          return applyRedoCommand(current)
+          nextState = applyRedoCommand(current)
+          break
         case 'unknown':
-          return current
+          nextState = current
+          break
         default:
-          return current
+          nextState = current
       }
+
+      setExecutionFeedback(
+        createPreciseExecutionFeedback(command, current, nextState, feedbackContext),
+      )
+
+      return nextState
     })
   }, [])
 
@@ -138,6 +164,7 @@ function App() {
         <aside className="control-panel" aria-label="Voice controls">
           <VoiceInputPanel
             canvasState={canvasState}
+            executionFeedback={executionFeedback}
             onCommandParsed={handleCommandParsed}
           />
 

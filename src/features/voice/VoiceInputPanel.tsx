@@ -12,7 +12,10 @@ import {
   createCancellationFeedback,
   createCommandExecutionFeedback,
 } from '../commands/commandFeedback'
-import type { CommandExecutionFeedback } from '../commands/commandFeedback'
+import type {
+  CommandExecutionFeedback,
+  CommandExecutionFeedbackContext,
+} from '../commands/commandFeedback'
 import { CommandFeedbackPanel } from '../commands/CommandFeedbackPanel'
 import { CommandPreview } from '../commands/CommandPreview'
 import {
@@ -33,11 +36,16 @@ import './VoiceInputPanel.css'
 
 type VoiceInputPanelProps = {
   canvasState: CanvasState
-  onCommandParsed?: (command: ParsedCommand) => void
+  executionFeedback?: CommandExecutionFeedback | null
+  onCommandParsed?: (
+    command: ParsedCommand,
+    feedbackContext?: CommandExecutionFeedbackContext,
+  ) => void
 }
 
 export function VoiceInputPanel({
   canvasState,
+  executionFeedback,
   onCommandParsed,
 }: VoiceInputPanelProps) {
   const {
@@ -66,9 +74,10 @@ export function VoiceInputPanel({
     useState<PendingClarification | null>(null)
   const [pendingExportClarification, setPendingExportClarification] =
     useState<PendingExportClarification | null>(null)
-  const [executionFeedback, setExecutionFeedback] =
+  const [localExecutionFeedback, setLocalExecutionFeedback] =
     useState<CommandExecutionFeedback | null>(null)
   const { isPlanning, planCommand, plannerResult, resetPlanner } = useCommandPlanner()
+  const displayedExecutionFeedback = localExecutionFeedback ?? executionFeedback ?? null
 
   const resetPendingInteraction = useCallback(() => {
     setClarificationFeedback(null)
@@ -88,7 +97,7 @@ export function VoiceInputPanel({
       resetPlanner()
       queueMicrotask(() => {
         resetPendingInteraction()
-        setExecutionFeedback(createCancellationFeedback(commandText))
+        setLocalExecutionFeedback(createCancellationFeedback(commandText))
       })
       return Promise.resolve()
     }
@@ -104,14 +113,9 @@ export function VoiceInputPanel({
           setPendingExportClarification(null)
           setClarificationFeedback(null)
           setPendingClarification(null)
-          setExecutionFeedback(
-            createCommandExecutionFeedback(clarifiedExportCommand, {
-              source: 'local',
-              status: 'executed',
-            }),
-          )
+          setLocalExecutionFeedback(null)
         })
-        onCommandParsed?.(clarifiedExportCommand)
+        onCommandParsed?.(clarifiedExportCommand, { source: 'local' })
         return Promise.resolve()
       }
     }
@@ -128,7 +132,7 @@ export function VoiceInputPanel({
         if (clarifiedFeedback.status !== 'ok') {
           queueMicrotask(() => {
             setClarificationFeedback(clarifiedFeedback)
-            setExecutionFeedback(
+            setLocalExecutionFeedback(
               createCommandExecutionFeedback(clarifiedCommand, {
                 source: 'local',
                 status: 'needs-clarification',
@@ -150,14 +154,9 @@ export function VoiceInputPanel({
         queueMicrotask(() => {
           setClarificationFeedback(null)
           setPendingClarification(null)
-          setExecutionFeedback(
-            createCommandExecutionFeedback(clarifiedCommand, {
-              source: 'local',
-              status: 'executed',
-            }),
-          )
+          setLocalExecutionFeedback(null)
         })
-        onCommandParsed?.(clarifiedCommand)
+        onCommandParsed?.(clarifiedCommand, { source: 'local' })
         return Promise.resolve()
       }
     }
@@ -170,7 +169,7 @@ export function VoiceInputPanel({
         setPendingExportClarification(createPendingExportClarification(localCommand))
         setClarificationFeedback(null)
         setPendingClarification(null)
-        setExecutionFeedback(
+        setLocalExecutionFeedback(
           createCommandExecutionFeedback(localCommand, {
             source: 'local',
             status: 'needs-clarification',
@@ -189,14 +188,9 @@ export function VoiceInputPanel({
         setClarificationFeedback(null)
         setPendingClarification(null)
         setPendingExportClarification(null)
-        setExecutionFeedback(
-          createCommandExecutionFeedback(localCommand, {
-            source: 'local',
-            status: 'executed',
-          }),
-        )
+        setLocalExecutionFeedback(null)
       })
-      onCommandParsed?.(localCommand)
+      onCommandParsed?.(localCommand, { source: 'local' })
       return Promise.resolve()
     }
 
@@ -211,7 +205,7 @@ export function VoiceInputPanel({
         if (plannedTargetFeedback.status !== 'ok') {
           queueMicrotask(() => {
             setClarificationFeedback(plannedTargetFeedback)
-            setExecutionFeedback(
+            setLocalExecutionFeedback(
               createCommandExecutionFeedback(result.command, {
                 source: 'ai',
                 status: 'needs-clarification',
@@ -235,22 +229,19 @@ export function VoiceInputPanel({
           setClarificationFeedback(null)
           setPendingClarification(null)
           setPendingExportClarification(null)
-          setExecutionFeedback(
-            createCommandExecutionFeedback(result.command, {
-              source: 'ai',
-              status: 'executed',
-              correction: result.correction,
-            }),
-          )
+          setLocalExecutionFeedback(null)
         })
-        onCommandParsed?.(result.command)
+        onCommandParsed?.(result.command, {
+          source: 'ai',
+          correction: result.correction,
+        })
         return
       }
 
       if (localTargetFeedback.status !== 'ok') {
         queueMicrotask(() => {
           setClarificationFeedback(localTargetFeedback)
-          setExecutionFeedback(
+          setLocalExecutionFeedback(
             createCommandExecutionFeedback(localCommand, {
               source: 'local',
               status: 'needs-clarification',
@@ -274,19 +265,14 @@ export function VoiceInputPanel({
           setClarificationFeedback(null)
           setPendingClarification(null)
           setPendingExportClarification(null)
-          setExecutionFeedback(
-            createCommandExecutionFeedback(localCommand, {
-              source: 'local',
-              status: 'executed',
-            }),
-          )
+          setLocalExecutionFeedback(null)
         })
-        onCommandParsed?.(localCommand)
+        onCommandParsed?.(localCommand, { source: 'local' })
         return
       }
 
       queueMicrotask(() => {
-        setExecutionFeedback(
+        setLocalExecutionFeedback(
           createCommandExecutionFeedback(localCommand, {
             source: 'ai',
             status: 'blocked',
@@ -334,7 +320,7 @@ export function VoiceInputPanel({
     resetTranscript()
     setTextCommand('')
     resetPendingInteraction()
-    setExecutionFeedback(null)
+    setLocalExecutionFeedback(null)
   }
 
   return (
@@ -395,7 +381,7 @@ export function VoiceInputPanel({
       </div>
 
       <div className="voice-panel__results">
-        <CommandFeedbackPanel feedback={executionFeedback} />
+        <CommandFeedbackPanel feedback={displayedExecutionFeedback} />
         <CommandPreview command={parsedCommand} />
         {clarificationFeedback && clarificationFeedback.status !== 'ok' ? (
           <div className="target-feedback" aria-live="polite">
