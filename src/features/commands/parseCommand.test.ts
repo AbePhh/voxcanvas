@@ -19,6 +19,60 @@ describe('parseCommand', () => {
     })
   })
 
+  it('parses implicit continuous primitive creation as an ordered batch', () => {
+    expect(
+      parseCommand('画一个黄色圆形在右边画一个蓝色矩形在中间画一个红色三角形在左边'),
+    ).toMatchObject({
+      action: 'batch',
+      commands: [
+        {
+          action: 'create',
+          shape: 'circle',
+          color: 'yellow',
+          position: 'right',
+        },
+        {
+          action: 'create',
+          shape: 'rect',
+          color: 'blue',
+          position: 'center',
+        },
+        {
+          action: 'create',
+          shape: 'triangle',
+          color: 'red',
+          position: 'left',
+        },
+      ],
+    })
+
+    expect(
+      parseCommand('画一个黄色圆形在右边画一个蓝色矩形在中间画一个红色三角形的左边'),
+    ).toMatchObject({
+      action: 'batch',
+      commands: [
+        {
+          action: 'create',
+          shape: 'circle',
+          color: 'yellow',
+          position: 'right',
+        },
+        {
+          action: 'create',
+          shape: 'rect',
+          color: 'blue',
+          position: 'center',
+        },
+        {
+          action: 'create',
+          shape: 'triangle',
+          color: 'red',
+          position: 'left',
+        },
+      ],
+    })
+  })
+
   it('parses simple history and canvas commands locally', () => {
     expect(parseCommand('撤销')).toMatchObject({ action: 'undo' })
     expect(parseCommand('重做')).toMatchObject({ action: 'redo' })

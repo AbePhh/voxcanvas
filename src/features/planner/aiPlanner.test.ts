@@ -55,6 +55,15 @@ describe('shouldUseAiPlanner', () => {
     ).toBe(true)
   })
 
+  it('uses AI for implicit multi-create commands', () => {
+    expect(
+      shouldUseAiPlanner(
+        '画一个黄色圆形在右边画一个蓝色矩形在中间画一个红色三角形在左边',
+        createCircleCommand,
+      ),
+    ).toBe(true)
+  })
+
   it('keeps simple geometry commands on the local path', () => {
     expect(shouldUseAiPlanner('画一个红色圆形', createCircleCommand)).toBe(false)
   })
@@ -152,6 +161,78 @@ describe('shouldUseAiPlanner', () => {
           count: 3,
         },
         axis: 'left',
+      },
+    })
+
+    globalThis.fetch = originalFetch
+  })
+
+  it('falls back to a validated implicit multi-create batch when AI drops the sequence', async () => {
+    const originalFetch = globalThis.fetch
+
+    globalThis.fetch = (() =>
+      Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            rawCommand: {
+              action: 'unknown',
+              reason: 'unsupported-action',
+              sourceText:
+                '画一个黄色圆形在右边画一个蓝色矩形在中间画一个红色三角形的左边',
+            },
+          }),
+      } as Response)) as typeof fetch
+
+    const result = await aiPlanner({
+      sourceText:
+        '画一个黄色圆形在右边画一个蓝色矩形在中间画一个红色三角形的左边',
+      localCommand: {
+        action: 'create',
+        shape: 'circle',
+        color: 'red',
+        position: 'left',
+        size: 'medium',
+        sourceText:
+          '画一个黄色圆形在右边画一个蓝色矩形在中间画一个红色三角形的左边',
+      },
+      sceneSpace: {
+        width: 1000,
+        height: 583,
+        origin: 'top-left',
+        unit: 'normalized',
+      },
+      sceneCapabilities: {
+        allowedShapes: ['circle', 'rect', 'triangle', 'line', 'text'],
+        allowedColors: [
+          'red',
+          'orange',
+          'yellow',
+          'green',
+          'blue',
+          'purple',
+          'black',
+          'white',
+          'gray',
+        ],
+        maxElements: 24,
+      },
+      canvas: {
+        width: 960,
+        height: 560,
+        objects: [],
+      },
+    })
+
+    expect(result).toMatchObject({
+      status: 'planned',
+      command: {
+        action: 'batch',
+        commands: [
+          { action: 'create', shape: 'circle', color: 'yellow', position: 'right' },
+          { action: 'create', shape: 'rect', color: 'blue', position: 'center' },
+          { action: 'create', shape: 'triangle', color: 'red', position: 'left' },
+        ],
       },
     })
 

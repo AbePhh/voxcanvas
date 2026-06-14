@@ -90,6 +90,9 @@ const multiStepConnectorPattern =
   /然后|接着|随后|之后|最后|并且|同时|顺便|再把|再将|再让|再给|[,，;；]|then|and then/i
 const multiStepSplitPattern =
   /然后|接着|随后|之后|最后|并且|同时|顺便|再把|再将|再让|再给|[,，;；]|then|and then/i
+const implicitMultiCreateVerbPattern = /(画|绘制|创建|添加|生成|新增)/g
+const implicitMultiCreateShapePattern =
+  /圆形|圆圈|圆|矩形|长方形|正方形|方形|方块|三角形|三角|线条|直线|文本|文字|文本框/g
 const batchStepIntentPatterns = [
   /(画|绘制|创建|添加|生成|新增|插入|加|放).{0,24}(圆形|圆圈|圆|矩形|长方形|正方形|方块|三角形|三角|线条|直线|文本|文字|文本框)/i,
   /(移动|移到|移动到|挪|挪到|放到|放在|贴着|靠着|往.{0,10}(左|右|上|下).{0,10}(移|移动|挪)|到.{0,10}(左|右|上|下).{0,10}(边|角|方))/i,
@@ -108,7 +111,18 @@ function hasBatchStepIntent(text) {
   return batchStepIntentPatterns.some((pattern) => pattern.test(text))
 }
 
+function hasImplicitMultiCreateIntent(sourceText) {
+  const createMatches = sourceText.match(implicitMultiCreateVerbPattern) ?? []
+  const shapeMatches = sourceText.match(implicitMultiCreateShapePattern) ?? []
+
+  return createMatches.length >= 1 && shapeMatches.length >= 2
+}
+
 function requiresBatchCommand(sourceText) {
+  if (hasImplicitMultiCreateIntent(sourceText)) {
+    return true
+  }
+
   if (!multiStepConnectorPattern.test(sourceText)) {
     return false
   }
@@ -122,6 +136,16 @@ function requiresBatchCommand(sourceText) {
 }
 
 function splitBatchSourceText(sourceText) {
+  if (
+    hasImplicitMultiCreateIntent(sourceText) &&
+    !multiStepConnectorPattern.test(sourceText)
+  ) {
+    return sourceText
+      .split(/(?=画|绘制|创建|添加|生成|新增)/)
+      .map((clause) => clause.trim())
+      .filter(Boolean)
+  }
+
   return sourceText
     .split(multiStepSplitPattern)
     .map((clause) => clause.trim())
@@ -279,6 +303,9 @@ function buildBatchPlannerPrompt(input, policy) {
     'Output: { "action": "batch", "sourceText": "把房子往右边移动一点，屋顶变成黑色", "commands": [{ "action": "move", "target": { "mode": "semantic", "groupLabel": "房子" }, "mode": "relative", "direction": "right", "distance": 48, "sourceText": "把房子往右边移动一点" }, { "action": "recolor", "target": { "mode": "semantic", "groupLabel": "房子", "partLabel": "屋顶" }, "color": "black", "sourceText": "屋顶变成黑色" }] }',
     'Input: 把所有气球变成红色，然后排成一行',
     'Output: { "action": "batch", "sourceText": "把所有气球变成红色，然后排成一行", "commands": [{ "action": "recolor", "target": { "mode": "semantic", "groupLabel": "气球", "scope": "all" }, "color": "red", "sourceText": "把所有气球变成红色" }, { "action": "arrange", "target": { "mode": "semantic", "groupLabel": "气球", "scope": "all" }, "layout": "row", "spacing": 32, "sourceText": "排成一行" }] }',
+    '',
+    'Input: 画一个黄色圆形在右边画一个蓝色矩形在中间画一个红色三角形在左边',
+    'Output: { "action": "batch", "sourceText": "画一个黄色圆形在右边画一个蓝色矩形在中间画一个红色三角形在左边", "commands": [{ "action": "create", "shape": "circle", "color": "yellow", "position": "right", "size": "medium", "sourceText": "画一个黄色圆形在右边" }, { "action": "create", "shape": "rect", "color": "blue", "position": "center", "size": "medium", "sourceText": "画一个蓝色矩形在中间" }, { "action": "create", "shape": "triangle", "color": "red", "position": "left", "size": "medium", "sourceText": "画一个红色三角形在左边" }] }',
     '',
     'Supported values:',
     '- shapes: circle, rect, triangle, line, text.',

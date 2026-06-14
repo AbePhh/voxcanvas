@@ -1,4 +1,5 @@
 import type { ParsedCommand } from '../commands/types'
+import { hasImplicitMultiCreateIntent } from '../commands/implicitMultiCreate'
 
 export type NormalizationDecision =
   | {
@@ -68,6 +69,13 @@ export function getNormalizationDecision(
   sourceText: string,
   localCommand: ParsedCommand,
 ): NormalizationDecision {
+  if (localCommand.action === 'batch') {
+    return {
+      useAi: false,
+      reason: 'local-command-is-confident',
+    }
+  }
+
   if (containsTextCommandIntent(sourceText)) {
     return {
       useAi: true,
@@ -86,6 +94,13 @@ export function getNormalizationDecision(
     return {
       useAi: true,
       reason: 'bulk-or-alignment-command-needs-planning',
+    }
+  }
+
+  if (hasImplicitMultiCreateIntent(sourceText)) {
+    return {
+      useAi: true,
+      reason: 'implicit-multi-create-command',
     }
   }
 

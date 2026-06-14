@@ -31,6 +31,7 @@ import {
   findAnchorReferenceGroups,
 } from '../commands/relativeAnchorIntent'
 import { detectSpatialMoveIntent } from '../commands/spatialMoveIntent'
+import { hasImplicitMultiCreateIntent } from '../commands/implicitMultiCreate'
 
 const allowedActions = new Set([
   'create',
@@ -220,6 +221,10 @@ function hasBatchStepIntent(text: string) {
 }
 
 function requiresBatchCommand(sourceText: string) {
+  if (hasImplicitMultiCreateIntent(sourceText)) {
+    return true
+  }
+
   if (!multiStepConnectorPattern.test(sourceText)) {
     return false
   }
@@ -1706,6 +1711,7 @@ export function validatePlannedCommand(
     effectiveSourceText,
     options,
   )
+  const isImplicitMultiCreate = hasImplicitMultiCreateIntent(effectiveSourceText)
   const relativeAdditionIntent = detectRelativeAdditionIntent(effectiveSourceText)
   const matchingAnchorGroups = relativeAdditionIntent
     ? findAnchorReferenceGroups(
@@ -1714,7 +1720,9 @@ export function validatePlannedCommand(
       )
     : []
   const isMissingRelativeAnchor =
-    Boolean(relativeAdditionIntent && options.canvas) && matchingAnchorGroups.length === 0
+    !isImplicitMultiCreate &&
+    Boolean(relativeAdditionIntent && options.canvas) &&
+    matchingAnchorGroups.length === 0
   const spatialMoveIntent = detectSpatialMoveIntent(effectiveSourceText)
 
   if (rawValue.action === 'unknown') {

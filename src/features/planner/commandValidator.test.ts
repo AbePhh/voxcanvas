@@ -2088,6 +2088,33 @@ describe('validatePlannedCommand', () => {
       status: 'invalid',
       reason: 'multi-step-command-requires-batch',
     })
+
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'create',
+          shape: 'circle',
+          color: 'yellow',
+          position: 'right',
+          size: 'medium',
+          sourceText:
+            '画一个黄色圆形在右边画一个蓝色矩形在中间画一个红色三角形在左边',
+        },
+        {
+          canvas: {
+            ...canvasWithOneCircle,
+            selectedId: undefined,
+            objects: [],
+            semanticGroups: [],
+          },
+          sourceText:
+            '画一个黄色圆形在右边画一个蓝色矩形在中间画一个红色三角形在左边',
+        },
+      ),
+    ).toMatchObject({
+      status: 'invalid',
+      reason: 'multi-step-command-requires-batch',
+    })
   })
 
   it('allows later batch steps to target the object created by an earlier step', () => {
@@ -2135,6 +2162,62 @@ describe('validatePlannedCommand', () => {
             action: 'move',
             target: { mode: 'selected' },
           },
+        ],
+      },
+    })
+  })
+
+  it('accepts implicit multi-create commands as ordered batch commands', () => {
+    const result = validatePlannedCommand(
+        {
+          action: 'batch',
+          sourceText:
+            '画一个黄色圆形在右边画一个蓝色矩形在中间画一个红色三角形在左边',
+          commands: [
+            {
+              action: 'create',
+              shape: 'circle',
+              color: 'yellow',
+              position: 'right',
+              size: 'medium',
+              sourceText: '画一个黄色圆形在右边',
+            },
+            {
+              action: 'create',
+              shape: 'rect',
+              color: 'blue',
+              position: 'center',
+              size: 'medium',
+              sourceText: '画一个蓝色矩形在中间',
+            },
+            {
+              action: 'create',
+              shape: 'triangle',
+              color: 'red',
+              position: 'left',
+              size: 'medium',
+              sourceText: '画一个红色三角形在左边',
+            },
+          ],
+        },
+        {
+          canvas: {
+            ...canvasWithOneCircle,
+            selectedId: undefined,
+            objects: [],
+            semanticGroups: [],
+          },
+        },
+      )
+
+    expect(result).toMatchObject({
+      status: 'planned',
+      command: {
+        action: 'batch',
+        commands: [
+          { action: 'create', shape: 'circle', color: 'yellow', position: 'right' },
+          { action: 'create', shape: 'rect', color: 'blue', position: 'center' },
+          { action: 'create', shape: 'triangle', color: 'red', position: 'left' },
         ],
       },
     })
