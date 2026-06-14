@@ -20,6 +20,10 @@ import type {
   CommandPlannerInput,
   CommandPlannerResult,
 } from './types'
+import {
+  detectRelativeAdditionIntent,
+  findAnchorReferenceGroups,
+} from '../commands/relativeAnchorIntent'
 
 const allowedActions = new Set([
   'create',
@@ -756,6 +760,15 @@ export function validatePlannedCommand(
     effectiveSourceText,
     options,
   )
+  const relativeAdditionIntent = detectRelativeAdditionIntent(effectiveSourceText)
+  const matchingAnchorGroups = relativeAdditionIntent
+    ? findAnchorReferenceGroups(
+        options.canvas?.semanticGroups,
+        relativeAdditionIntent.anchorLabel,
+      )
+    : []
+  const isMissingRelativeAnchor =
+    Boolean(relativeAdditionIntent && options.canvas) && matchingAnchorGroups.length === 0
 
   if (rawValue.action === 'unknown') {
     return {
@@ -763,6 +776,26 @@ export function validatePlannedCommand(
       reason:
         typeof rawValue.reason === 'string' ? rawValue.reason : 'unsupported-action',
       rawValue,
+    }
+  }
+
+  if (
+    isMissingRelativeAnchor &&
+    (rawValue.action === 'create' ||
+      rawValue.action === 'scene' ||
+      rawValue.action === 'addSceneObject')
+  ) {
+    return {
+      status: 'invalid',
+      reason: 'missing-anchor',
+      rawValue: {
+        action: rawValue.action,
+        sourceText,
+        anchorLabel: relativeAdditionIntent?.anchorLabel,
+        objectLabel: relativeAdditionIntent?.objectLabel,
+        relation: relativeAdditionIntent?.relation,
+        originalValue: rawValue,
+      },
     }
   }
 
