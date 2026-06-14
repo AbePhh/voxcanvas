@@ -231,18 +231,15 @@ AI 场景生成会输出 scene graph，每个元素包含：
 npm install
 ```
 
-复制环境变量文件：
-
-```bash
-cp .env.example .env
-```
-
-在 `.env` 中配置：
+手动创建本地环境变量文件 `.env`：
 
 ```bash
 DEEPSEEK_API_KEY=你的 DeepSeek API Key
 DEEPSEEK_MODEL=deepseek-chat
+PORT=8787
 ```
+
+`.env` 只用于本地运行，不应提交到 Git 仓库。复杂场景生成、语义编辑、多步 AI 规划等功能需要配置有效的 DeepSeek API Key；未配置时，本地基础命令仍可使用，但 AI 规划能力不可用。
 
 启动前端和后端：
 
