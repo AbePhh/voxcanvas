@@ -23,7 +23,14 @@ import {
   resolveExportClarificationResponse,
 } from '../commands/exportClarification'
 import type { PendingExportClarification } from '../commands/exportClarification'
+import {
+  createMissingAnchorClarification,
+  createMissingAnchorFeedback,
+  resolveMissingAnchorClarification,
+} from '../commands/missingAnchorClarification'
+import type { MissingAnchorClarification } from '../commands/missingAnchorClarification'
 import { parseCommand } from '../commands/parseCommand'
+import type { SceneRelation } from '../commands/types'
 import type { ParsedCommand } from '../commands/types'
 import type { CanvasState } from '../canvas/types'
 import {
@@ -41,6 +48,46 @@ type VoiceInputPanelProps = {
     command: ParsedCommand,
     feedbackContext?: CommandExecutionFeedbackContext,
   ) => void
+}
+
+const sceneRelations = new Set<SceneRelation>([
+  'left-of',
+  'right-of',
+  'above',
+  'below',
+  'near',
+  'inside',
+  'around',
+])
+
+function createPendingMissingAnchorFromPlannerResult(
+  rawValue: unknown,
+  sourceText: string,
+) {
+  if (typeof rawValue !== 'object' || rawValue === null) {
+    return null
+  }
+
+  const value = rawValue as {
+    anchorLabel?: unknown
+    objectLabel?: unknown
+    relation?: unknown
+  }
+
+  if (
+    typeof value.anchorLabel !== 'string' ||
+    typeof value.relation !== 'string' ||
+    !sceneRelations.has(value.relation as SceneRelation)
+  ) {
+    return null
+  }
+
+  return createMissingAnchorClarification({
+    anchorLabel: value.anchorLabel,
+    objectLabel: typeof value.objectLabel === 'string' ? value.objectLabel : undefined,
+    relation: value.relation as SceneRelation,
+    sourceText,
+  })
 }
 
 export function VoiceInputPanel({
@@ -74,8 +121,13 @@ export function VoiceInputPanel({
     useState<PendingClarification | null>(null)
   const [pendingExportClarification, setPendingExportClarification] =
     useState<PendingExportClarification | null>(null)
+  const [pendingMissingAnchor, setPendingMissingAnchor] =
+    useState<MissingAnchorClarification | null>(null)
   const [localExecutionFeedback, setLocalExecutionFeedback] =
     useState<CommandExecutionFeedback | null>(null)
+  const processCommandTextRef = useRef<(commandText: string) => Promise<void> | void>(
+    () => Promise.resolve(),
+  )
   const { isPlanning, planCommand, plannerResult, resetPlanner } = useCommandPlanner()
   const displayedExecutionFeedback = localExecutionFeedback ?? executionFeedback ?? null
 
@@ -83,6 +135,7 @@ export function VoiceInputPanel({
     setClarificationFeedback(null)
     setPendingClarification(null)
     setPendingExportClarification(null)
+    setPendingMissingAnchor(null)
   }, [])
 
   useEffect(() => {
@@ -113,9 +166,34 @@ export function VoiceInputPanel({
           setPendingExportClarification(null)
           setClarificationFeedback(null)
           setPendingClarification(null)
+          setPendingMissingAnchor(null)
           setLocalExecutionFeedback(null)
         })
         onCommandParsed?.(clarifiedExportCommand, { source: 'local' })
+        return Promise.resolve()
+      }
+    }
+
+    if (pendingMissingAnchor) {
+      const resolvedMissingAnchor = resolveMissingAnchorClarification(
+        commandText,
+        pendingMissingAnchor,
+      )
+
+      if (resolvedMissingAnchor?.status === 'cancelled') {
+        queueMicrotask(() => {
+          setPendingMissingAnchor(null)
+          setLocalExecutionFeedback(createCancellationFeedback(commandText))
+        })
+        return Promise.resolve()
+      }
+
+      if (resolvedMissingAnchor?.status === 'confirmed') {
+        queueMicrotask(() => {
+          resetPendingInteraction()
+          setLocalExecutionFeedback(null)
+          void processCommandTextRef.current(resolvedMissingAnchor.prompt)
+        })
         return Promise.resolve()
       }
     }
@@ -132,6 +210,7 @@ export function VoiceInputPanel({
         if (clarifiedFeedback.status !== 'ok') {
           queueMicrotask(() => {
             setClarificationFeedback(clarifiedFeedback)
+            setPendingMissingAnchor(null)
             setLocalExecutionFeedback(
               createCommandExecutionFeedback(clarifiedCommand, {
                 source: 'local',
@@ -154,6 +233,7 @@ export function VoiceInputPanel({
         queueMicrotask(() => {
           setClarificationFeedback(null)
           setPendingClarification(null)
+          setPendingMissingAnchor(null)
           setLocalExecutionFeedback(null)
         })
         onCommandParsed?.(clarifiedCommand, { source: 'local' })
@@ -169,6 +249,7 @@ export function VoiceInputPanel({
         setPendingExportClarification(createPendingExportClarification(localCommand))
         setClarificationFeedback(null)
         setPendingClarification(null)
+        setPendingMissingAnchor(null)
         setLocalExecutionFeedback(
           createCommandExecutionFeedback(localCommand, {
             source: 'local',
@@ -188,6 +269,7 @@ export function VoiceInputPanel({
         setClarificationFeedback(null)
         setPendingClarification(null)
         setPendingExportClarification(null)
+        setPendingMissingAnchor(null)
         setLocalExecutionFeedback(null)
       })
       onCommandParsed?.(localCommand, { source: 'local' })
@@ -205,6 +287,7 @@ export function VoiceInputPanel({
         if (plannedTargetFeedback.status !== 'ok') {
           queueMicrotask(() => {
             setClarificationFeedback(plannedTargetFeedback)
+            setPendingMissingAnchor(null)
             setLocalExecutionFeedback(
               createCommandExecutionFeedback(result.command, {
                 source: 'ai',
@@ -229,6 +312,7 @@ export function VoiceInputPanel({
           setClarificationFeedback(null)
           setPendingClarification(null)
           setPendingExportClarification(null)
+          setPendingMissingAnchor(null)
           setLocalExecutionFeedback(null)
         })
         onCommandParsed?.(result.command, {
@@ -238,9 +322,28 @@ export function VoiceInputPanel({
         return
       }
 
+      if (result.status === 'invalid' && result.reason === 'missing-anchor') {
+        const pending = createPendingMissingAnchorFromPlannerResult(
+          result.rawValue,
+          commandText,
+        )
+
+        if (pending) {
+          queueMicrotask(() => {
+            setPendingMissingAnchor(pending)
+            setClarificationFeedback(null)
+            setPendingClarification(null)
+            setPendingExportClarification(null)
+            setLocalExecutionFeedback(createMissingAnchorFeedback(pending.intent))
+          })
+          return
+        }
+      }
+
       if (localTargetFeedback.status !== 'ok') {
         queueMicrotask(() => {
           setClarificationFeedback(localTargetFeedback)
+          setPendingMissingAnchor(null)
           setLocalExecutionFeedback(
             createCommandExecutionFeedback(localCommand, {
               source: 'local',
@@ -265,6 +368,7 @@ export function VoiceInputPanel({
           setClarificationFeedback(null)
           setPendingClarification(null)
           setPendingExportClarification(null)
+          setPendingMissingAnchor(null)
           setLocalExecutionFeedback(null)
         })
         onCommandParsed?.(localCommand, { source: 'local' })
@@ -285,10 +389,15 @@ export function VoiceInputPanel({
     onCommandParsed,
     pendingClarification,
     pendingExportClarification,
+    pendingMissingAnchor,
     planCommand,
     resetPendingInteraction,
     resetPlanner,
   ])
+
+  useEffect(() => {
+    processCommandTextRef.current = processCommandText
+  }, [processCommandText])
 
   useEffect(() => {
     if (!transcript || transcript === lastExecutedTranscriptRef.current) {

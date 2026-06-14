@@ -21,6 +21,39 @@ describe('validatePlannedCommand', () => {
       },
     ],
   }
+  const canvasWithHouseAnchor = {
+    ...canvasWithOneCircle,
+    semanticGroups: [
+      {
+        id: 'house-1',
+        groupId: 'house-1',
+        groupLabel: '房子',
+        displayLabel: '房子',
+        referenceLabels: ['房子', 'house-1'],
+        partLabels: ['墙体'],
+        objectIds: ['house-wall'],
+        bounds: { x: 360, y: 300, width: 240, height: 160 },
+        selected: false,
+      },
+    ],
+    objects: [
+      ...canvasWithOneCircle.objects,
+      {
+        id: 'house-wall',
+        type: 'rect' as const,
+        x: 360,
+        y: 300,
+        width: 240,
+        height: 160,
+        fill: '#f97316',
+        text: undefined,
+        groupId: 'house-1',
+        groupLabel: '房子',
+        partLabel: '墙体',
+        zIndex: 10,
+      },
+    ],
+  }
 
   it('accepts a valid create command from planner output', () => {
     expect(
@@ -143,7 +176,7 @@ describe('validatePlannedCommand', () => {
           direction: 'right',
           distance: 80,
         },
-        { canvas: canvasWithOneCircle },
+        { canvas: canvasWithHouseAnchor },
       ),
     ).toMatchObject({
       status: 'planned',
@@ -162,7 +195,7 @@ describe('validatePlannedCommand', () => {
           target: 'selected',
           color: 'green',
         },
-        { canvas: canvasWithOneCircle },
+        { canvas: canvasWithHouseAnchor },
       ),
     ).toMatchObject({
       status: 'planned',
@@ -263,7 +296,7 @@ describe('validatePlannedCommand', () => {
             },
           ],
         },
-        { canvas: canvasWithOneCircle },
+        { canvas: canvasWithHouseAnchor },
       ),
     ).toMatchObject({
       status: 'planned',
@@ -330,7 +363,7 @@ describe('validatePlannedCommand', () => {
             },
           ],
         },
-        { canvas: canvasWithOneCircle },
+        { canvas: canvasWithHouseAnchor },
       ),
     ).toMatchObject({
       status: 'planned',
@@ -361,7 +394,7 @@ describe('validatePlannedCommand', () => {
 
   it('coerces full scenes into incremental semantic additions when they contain new elements', () => {
     const options = {
-      canvas: canvasWithOneCircle,
+      canvas: canvasWithHouseAnchor,
       sourceText: '在房子的右边再生成一棵树',
       localCommand: {
         action: 'unknown',
@@ -414,10 +447,6 @@ describe('validatePlannedCommand', () => {
         objectLabel: '树',
         elements: [
           {
-            id: 'house-wall',
-            groupLabel: '房子',
-          },
-          {
             id: 'tree-trunk',
             groupLabel: '树',
           },
@@ -432,7 +461,7 @@ describe('validatePlannedCommand', () => {
 
   it('rejects primitive creates for incremental semantic additions', () => {
     const options = {
-      canvas: canvasWithOneCircle,
+      canvas: canvasWithHouseAnchor,
       sourceText: '在房子的右边再生成一棵树',
       localCommand: {
         action: 'unknown',
@@ -456,6 +485,142 @@ describe('validatePlannedCommand', () => {
     ).toMatchObject({
       status: 'invalid',
       reason: 'incremental-addition-requires-add-scene-object',
+    })
+  })
+
+  it('blocks relative additions when the referenced anchor is missing', () => {
+    const options = {
+      canvas: {
+        ...canvasWithOneCircle,
+        selectedId: undefined,
+        objects: [],
+        semanticGroups: [],
+      },
+      sourceText: '在太阳下面再加一朵云',
+      localCommand: {
+        action: 'unknown',
+        reason: 'planner-required-scene-or-shape',
+        sourceText: '在太阳下面再加一朵云',
+      } as const,
+    }
+
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'create',
+          shape: 'circle',
+          color: 'white',
+          position: 'bottom',
+          size: 'medium',
+          sourceText: '在太阳下面再加一朵云',
+        },
+        options,
+      ),
+    ).toMatchObject({
+      status: 'invalid',
+      reason: 'missing-anchor',
+      rawValue: {
+        anchorLabel: '太阳',
+        objectLabel: '云',
+        relation: 'below',
+      },
+    })
+
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'addSceneObject',
+          objectLabel: '云',
+          anchor: { groupLabel: '太阳', relation: 'below' },
+          sourceText: '在太阳下面再加一朵云',
+          elements: [
+            {
+              id: 'cloud',
+              groupId: 'cloud-1',
+              groupLabel: '云',
+              shape: 'circle',
+              color: 'white',
+              bbox: { x: 400, y: 180, width: 160, height: 90 },
+            },
+          ],
+        },
+        options,
+      ),
+    ).toMatchObject({
+      status: 'invalid',
+      reason: 'missing-anchor',
+    })
+  })
+
+  it('allows relative additions when the referenced semantic anchor exists', () => {
+    const options = {
+      canvas: {
+        ...canvasWithOneCircle,
+        selectedId: undefined,
+        semanticGroups: [
+          {
+            id: 'sun-1',
+            groupId: 'sun-1',
+            groupLabel: '太阳',
+            displayLabel: '太阳',
+            referenceLabels: ['太阳', 'sun-1'],
+            partLabels: ['太阳'],
+            objectIds: ['sun-body'],
+            bounds: { x: 720, y: 60, width: 120, height: 120 },
+            selected: false,
+          },
+        ],
+        objects: [
+          {
+            id: 'sun-body',
+            type: 'circle' as const,
+            x: 720,
+            y: 60,
+            width: 120,
+            height: 120,
+            fill: '#facc15',
+            text: undefined,
+            groupId: 'sun-1',
+            groupLabel: '太阳',
+            partLabel: '太阳',
+            zIndex: 20,
+          },
+        ],
+      },
+      sourceText: '在太阳下面再加一朵云',
+      localCommand: {
+        action: 'unknown',
+        reason: 'planner-required-scene-or-shape',
+        sourceText: '在太阳下面再加一朵云',
+      } as const,
+    }
+
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'addSceneObject',
+          objectLabel: '云',
+          anchor: { groupLabel: '太阳', relation: 'below' },
+          sourceText: '在太阳下面再加一朵云',
+          elements: [
+            {
+              id: 'cloud',
+              groupId: 'cloud-1',
+              groupLabel: '云',
+              shape: 'circle',
+              color: 'white',
+              bbox: { x: 720, y: 220, width: 160, height: 90 },
+            },
+          ],
+        },
+        options,
+      ),
+    ).toMatchObject({
+      status: 'planned',
+      command: {
+        action: 'addSceneObject',
+        objectLabel: '云',
+      },
     })
   })
 
