@@ -1,4 +1,5 @@
 import type {
+  AddSceneObjectCommand,
   CanvasResizeAnchor,
   CommandTarget,
   CreateShapeCommand,
@@ -280,6 +281,20 @@ export function applyCreateCommand(
 export function applySceneCommand(
   state: CanvasState,
   command: SceneCommand,
+): CanvasState {
+  return appendSceneElements(state, command)
+}
+
+export function applyAddSceneObjectCommand(
+  state: CanvasState,
+  command: AddSceneObjectCommand,
+): CanvasState {
+  return appendSceneElements(state, command)
+}
+
+function appendSceneElements(
+  state: CanvasState,
+  command: SceneCommand | AddSceneObjectCommand,
 ): CanvasState {
   const shapes = createShapesFromSceneCommand(command, state)
 

@@ -295,6 +295,170 @@ describe('validatePlannedCommand', () => {
     })
   })
 
+  it('accepts incremental scene object additions from planner output', () => {
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'addSceneObject',
+          title: '新增树',
+          objectLabel: '树',
+          anchor: {
+            groupLabel: '房子',
+            relation: 'right-of',
+          },
+          sourceText: '在房子的右边再生成一棵树',
+          elements: [
+            {
+              id: 'tree-trunk',
+              groupId: 'tree-2',
+              groupLabel: '树',
+              partLabel: '树干',
+              shape: 'rect',
+              color: 'orange',
+              bbox: { x: 680, y: 360, width: 50, height: 140 },
+              zIndex: 10,
+            },
+            {
+              id: 'tree-crown',
+              groupId: 'tree-2',
+              groupLabel: '树',
+              partLabel: '树冠',
+              shape: 'circle',
+              color: 'green',
+              bbox: { x: 625, y: 250, width: 160, height: 160 },
+              zIndex: 11,
+            },
+          ],
+        },
+        { canvas: canvasWithOneCircle },
+      ),
+    ).toMatchObject({
+      status: 'planned',
+      command: {
+        action: 'addSceneObject',
+        objectLabel: '树',
+        anchor: {
+          groupLabel: '房子',
+          relation: 'right-of',
+        },
+        elements: [
+          {
+            id: 'tree-trunk',
+            groupId: 'tree-2',
+            groupLabel: '树',
+            partLabel: '树干',
+          },
+          {
+            id: 'tree-crown',
+            groupId: 'tree-2',
+            groupLabel: '树',
+            partLabel: '树冠',
+          },
+        ],
+      },
+    })
+  })
+
+  it('coerces full scenes into incremental semantic additions when they contain new elements', () => {
+    const options = {
+      canvas: canvasWithOneCircle,
+      sourceText: '在房子的右边再生成一棵树',
+      localCommand: {
+        action: 'unknown',
+        reason: 'planner-required-scene-or-shape',
+        sourceText: '在房子的右边再生成一棵树',
+      } as const,
+    }
+
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'scene',
+          title: '房子和树',
+          sourceText: '在房子的右边再生成一棵树',
+          elements: [
+            {
+              id: 'house-wall',
+              groupId: 'house-1',
+              groupLabel: '房子',
+              shape: 'rect',
+              color: 'orange',
+              bbox: { x: 380, y: 330, width: 240, height: 160 },
+            },
+            {
+              id: 'tree-trunk',
+              groupId: 'tree-1',
+              groupLabel: '树',
+              partLabel: '树干',
+              shape: 'rect',
+              color: 'orange',
+              bbox: { x: 680, y: 360, width: 50, height: 140 },
+            },
+            {
+              id: 'tree-crown',
+              groupId: 'tree-1',
+              groupLabel: '树',
+              partLabel: '树冠',
+              shape: 'circle',
+              color: 'green',
+              bbox: { x: 625, y: 250, width: 160, height: 160 },
+            },
+          ],
+        },
+        options,
+      ),
+    ).toMatchObject({
+      status: 'planned',
+      command: {
+        action: 'addSceneObject',
+        objectLabel: '树',
+        elements: [
+          {
+            id: 'house-wall',
+            groupLabel: '房子',
+          },
+          {
+            id: 'tree-trunk',
+            groupLabel: '树',
+          },
+          {
+            id: 'tree-crown',
+            groupLabel: '树',
+          },
+        ],
+      },
+    })
+  })
+
+  it('rejects primitive creates for incremental semantic additions', () => {
+    const options = {
+      canvas: canvasWithOneCircle,
+      sourceText: '在房子的右边再生成一棵树',
+      localCommand: {
+        action: 'unknown',
+        reason: 'planner-required-scene-or-shape',
+        sourceText: '在房子的右边再生成一棵树',
+      } as const,
+    }
+
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'create',
+          shape: 'rect',
+          color: 'orange',
+          position: 'right',
+          size: 'medium',
+          sourceText: '在房子的右边再生成一棵树',
+        },
+        options,
+      ),
+    ).toMatchObject({
+      status: 'invalid',
+      reason: 'incremental-addition-requires-add-scene-object',
+    })
+  })
+
   it('rejects invalid scene graph commands', () => {
     expect(
       validatePlannedCommand({

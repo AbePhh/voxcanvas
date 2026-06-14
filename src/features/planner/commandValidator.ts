@@ -6,8 +6,11 @@ import type {
   CommandPosition,
   CommandSize,
   CommandTarget,
+  ParsedCommand,
   SceneBBox,
   SceneElement,
+  SceneObjectAnchor,
+  SceneRelation,
 } from '../commands/types'
 import { matchesCommandColor } from '../canvas/colorStyles'
 import { getSceneSpace, sceneGraphLimits } from '../canvas/sceneGraph'
@@ -30,6 +33,7 @@ const allowedActions = new Set([
   'unknown',
   'resizeCanvas',
   'scene',
+  'addSceneObject',
 ])
 const allowedShapes = new Set<ShapeKind>(['circle', 'rect', 'triangle', 'line', 'text'])
 const allowedColors = new Set<CommandColor>([
@@ -85,10 +89,28 @@ const allowedCanvasResizeAnchors = new Set<CanvasResizeAnchor>([
   'bottom-left',
   'bottom-right',
 ])
+const allowedSceneRelations = new Set<SceneRelation>([
+  'left-of',
+  'right-of',
+  'above',
+  'below',
+  'near',
+  'inside',
+  'around',
+])
 const allowedCorrectionConfidence = new Set(['high', 'medium', 'low'])
 type ValidatorOptions = {
   canvas?: CommandPlannerInput['canvas']
+  sourceText?: string
+  localCommand?: ParsedCommand
 }
+
+const explicitPrimitiveShapePattern =
+  /圆形|圆圈|圆|矩形|长方形|正方形|方块|三角形|三角|线条|直线|文本|文字|文本框/
+const createIntentPattern = /画|绘制|创建|添加|生成|新增|加|放|插入/
+const incrementalAdditionPattern =
+  /再|再来|添加|新增|加一|加个|加一个|放一|放个|放一个|插入|右边|左边|旁边|附近|上面|下面|周围/
+const wholeSceneResetPattern = /重新|重画|整个|完整|从头|新场景|全新场景/
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
@@ -106,6 +128,38 @@ function normalizeSafeLabel(value: unknown, maxLength = 32) {
   const normalized = value.trim()
 
   return normalized ? normalized.slice(0, maxLength) : undefined
+}
+
+function normalizeIntentText(text: string) {
+  return text.replace(/\s+/g, '').replace(/[，。！？、,.!?；;：:"“”'‘’（）()]/g, '')
+}
+
+function requestsSemanticObject(sourceText: string, localCommand?: ParsedCommand) {
+  const text = normalizeIntentText(sourceText)
+  const localParserEscalatedSemanticObject =
+    localCommand?.action === 'unknown' &&
+    localCommand.reason === 'planner-required-scene-or-shape'
+
+  return (
+    createIntentPattern.test(text) &&
+    !explicitPrimitiveShapePattern.test(text) &&
+    (localParserEscalatedSemanticObject || text.length >= 4)
+  )
+}
+
+function requiresIncrementalSceneObject(
+  sourceText: string,
+  options: ValidatorOptions,
+) {
+  const text = normalizeIntentText(sourceText)
+  const hasExistingCanvasObjects = (options.canvas?.objects.length ?? 0) > 0
+
+  return (
+    hasExistingCanvasObjects &&
+    requestsSemanticObject(sourceText, options.localCommand) &&
+    incrementalAdditionPattern.test(text) &&
+    !wholeSceneResetPattern.test(text)
+  )
 }
 
 function normalizeCorrectionSummary(value: unknown): CommandCorrectionSummary | undefined {
@@ -243,6 +297,156 @@ function normalizeSceneElement(
         ? value.text.trim().slice(0, sceneGraphLimits.maxTextLength)
         : undefined,
   }
+}
+
+function normalizeSceneObjectAnchor(value: unknown): SceneObjectAnchor | undefined {
+  if (!isRecord(value)) {
+    return undefined
+  }
+
+  const relation =
+    typeof value.relation === 'string' &&
+    allowedSceneRelations.has(value.relation as SceneRelation)
+      ? (value.relation as SceneRelation)
+      : undefined
+  const anchor: SceneObjectAnchor = {
+    groupId: normalizeSafeLabel(value.groupId, 48),
+    groupLabel: normalizeSafeLabel(value.groupLabel),
+    partLabel: normalizeSafeLabel(value.partLabel),
+    relation,
+  }
+
+  return Object.values(anchor).some((item) => item !== undefined)
+    ? anchor
+    : undefined
+}
+
+function normalizeComparableLabel(value: unknown) {
+  return typeof value === 'string'
+    ? value
+        .toLowerCase()
+        .replace(/\s+/g, '')
+        .replace(/[，。！？、,.!?；;：:"“”'‘’（）()[\]{}]/g, '')
+        .trim()
+    : ''
+}
+
+function getSemanticGroupBoundsInSceneSpace(
+  group: NonNullable<CommandPlannerInput['canvas']['semanticGroups']>[number],
+  canvas: CommandPlannerInput['canvas'],
+  sceneSpace: ReturnType<typeof getSceneSpace>,
+): SceneBBox {
+  return {
+    x: (group.bounds.x / canvas.width) * sceneSpace.width,
+    y: (group.bounds.y / canvas.height) * sceneSpace.height,
+    width: (group.bounds.width / canvas.width) * sceneSpace.width,
+    height: (group.bounds.height / canvas.height) * sceneSpace.height,
+  }
+}
+
+function getBBoxArea(bbox: SceneBBox) {
+  return Math.max(0, bbox.width) * Math.max(0, bbox.height)
+}
+
+function getIntersectionArea(a: SceneBBox, b: SceneBBox) {
+  const minX = Math.max(a.x, b.x)
+  const minY = Math.max(a.y, b.y)
+  const maxX = Math.min(a.x + a.width, b.x + b.width)
+  const maxY = Math.min(a.y + a.height, b.y + b.height)
+
+  return Math.max(0, maxX - minX) * Math.max(0, maxY - minY)
+}
+
+function getBBoxOverlapRatio(a: SceneBBox, b: SceneBBox) {
+  const smallerArea = Math.min(getBBoxArea(a), getBBoxArea(b))
+
+  return smallerArea > 0 ? getIntersectionArea(a, b) / smallerArea : 0
+}
+
+function getSemanticGroupLabels(
+  group: NonNullable<CommandPlannerInput['canvas']['semanticGroups']>[number],
+) {
+  return [
+    group.groupLabel,
+    group.displayLabel,
+    ...(group.referenceLabels ?? []),
+  ].map(normalizeComparableLabel)
+}
+
+function isExistingSceneElement(
+  element: SceneElement,
+  canvas: CommandPlannerInput['canvas'],
+  sceneSpace: ReturnType<typeof getSceneSpace>,
+) {
+  const semanticGroups = canvas.semanticGroups ?? []
+
+  if (semanticGroups.length === 0) {
+    return false
+  }
+
+  if (
+    element.groupId &&
+    semanticGroups.some((group) => group.groupId === element.groupId)
+  ) {
+    return true
+  }
+
+  const elementGroupLabel = normalizeComparableLabel(element.groupLabel)
+
+  if (!elementGroupLabel) {
+    return false
+  }
+
+  return semanticGroups.some((group) => {
+    if (!getSemanticGroupLabels(group).includes(elementGroupLabel)) {
+      return false
+    }
+
+    return (
+      getBBoxOverlapRatio(
+        element.bbox,
+        getSemanticGroupBoundsInSceneSpace(group, canvas, sceneSpace),
+      ) >= 0.55
+    )
+  })
+}
+
+function selectIncrementalSceneElements(
+  elements: SceneElement[],
+  canvas: CommandPlannerInput['canvas'],
+  sceneSpace: ReturnType<typeof getSceneSpace>,
+) {
+  const newElements = elements.filter(
+    (element) => !isExistingSceneElement(element, canvas, sceneSpace),
+  )
+
+  return newElements.length > 0 ? newElements : []
+}
+
+function inferSceneObjectLabel(
+  elements: SceneElement[],
+  rawValue: Record<string, unknown>,
+) {
+  const explicitLabel = normalizeSafeLabel(rawValue.objectLabel)
+
+  if (explicitLabel) {
+    return explicitLabel
+  }
+
+  const labelCounts = new Map<string, number>()
+
+  for (const element of elements) {
+    if (!element.groupLabel) {
+      continue
+    }
+
+    labelCounts.set(element.groupLabel, (labelCounts.get(element.groupLabel) ?? 0) + 1)
+  }
+
+  return (
+    Array.from(labelCounts.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] ??
+    normalizeSafeLabel(rawValue.title)
+  )
 }
 
 function isCanvasResizeDirection(value: unknown): value is CanvasResizeDirection {
@@ -546,13 +750,41 @@ export function validatePlannedCommand(
 
   const sourceText =
     typeof rawValue.sourceText === 'string' ? rawValue.sourceText : 'planner-output'
+  const effectiveSourceText = options.sourceText ?? sourceText
   const correction = normalizeCorrectionSummary(rawValue.correction)
+  const needsIncrementalSceneObject = requiresIncrementalSceneObject(
+    effectiveSourceText,
+    options,
+  )
 
   if (rawValue.action === 'unknown') {
     return {
       status: 'invalid',
       reason:
         typeof rawValue.reason === 'string' ? rawValue.reason : 'unsupported-action',
+      rawValue,
+    }
+  }
+
+  if (
+    rawValue.action !== 'addSceneObject' &&
+    rawValue.action !== 'scene' &&
+    needsIncrementalSceneObject
+  ) {
+    return {
+      status: 'invalid',
+      reason: 'incremental-addition-requires-add-scene-object',
+      rawValue,
+    }
+  }
+
+  if (
+    rawValue.action === 'create' &&
+    needsIncrementalSceneObject
+  ) {
+    return {
+      status: 'invalid',
+      reason: 'semantic-object-cannot-be-primitive-create',
       rawValue,
     }
   }
@@ -567,7 +799,7 @@ export function validatePlannedCommand(
     )
   }
 
-  if (rawValue.action === 'scene') {
+  if (rawValue.action === 'scene' || rawValue.action === 'addSceneObject') {
     if (!options.canvas) {
       return {
         status: 'invalid',
@@ -608,12 +840,56 @@ export function validatePlannedCommand(
       }
     }
 
+    const normalizedElements = elements as SceneElement[]
+
+    if (rawValue.action === 'addSceneObject') {
+      return createPlannedResult(
+        {
+          action: 'addSceneObject',
+          title: normalizeSafeLabel(rawValue.title, 48),
+          objectLabel: normalizeSafeLabel(rawValue.objectLabel),
+          anchor: normalizeSceneObjectAnchor(rawValue.anchor),
+          sourceText,
+          elements: normalizedElements,
+        },
+        correction,
+      )
+    }
+
+    if (needsIncrementalSceneObject) {
+      const incrementalElements = selectIncrementalSceneElements(
+        normalizedElements,
+        options.canvas,
+        sceneSpace,
+      )
+
+      if (incrementalElements.length === 0) {
+        return {
+          status: 'invalid',
+          reason: 'incremental-scene-has-no-new-elements',
+          rawValue,
+        }
+      }
+
+      return createPlannedResult(
+        {
+          action: 'addSceneObject',
+          title: normalizeSafeLabel(rawValue.title, 48),
+          objectLabel: inferSceneObjectLabel(incrementalElements, rawValue),
+          anchor: normalizeSceneObjectAnchor(rawValue.anchor),
+          sourceText,
+          elements: incrementalElements,
+        },
+        correction,
+      )
+    }
+
     return createPlannedResult(
       {
         action: 'scene',
         title: normalizeSafeLabel(rawValue.title, 48),
         sourceText,
-        elements: elements as SceneElement[],
+        elements: normalizedElements,
       },
       correction,
     )

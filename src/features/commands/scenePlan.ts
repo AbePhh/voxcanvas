@@ -2,7 +2,12 @@ import { colorStyles } from '../canvas/colorStyles'
 import { createSemanticGroupSummaries } from '../canvas/semanticGroups'
 import type { CanvasState, ShapeObject } from '../canvas/types'
 import { colorLabels, shapeLabels } from './commandLabels'
-import type { CommandColor, SceneCommand, SceneElement } from './types'
+import type {
+  AddSceneObjectCommand,
+  CommandColor,
+  SceneCommand,
+  SceneElement,
+} from './types'
 
 export type ScenePlanElementSummary = {
   id: string
@@ -235,7 +240,9 @@ function summarizeShape(
   }
 }
 
-export function createScenePlanSummary(command: SceneCommand): ScenePlanSummary {
+export function createScenePlanSummary(
+  command: SceneCommand | AddSceneObjectCommand,
+): ScenePlanSummary {
   const groups = new Map<string, ScenePlanGroupSummary>()
   const sortedElements = sortSceneElements(command.elements)
   const semanticGroups = createSemanticGroupSummaries(
@@ -275,7 +282,9 @@ export function createScenePlanSummary(command: SceneCommand): ScenePlanSummary 
   })
 
   return {
-    title: command.title?.trim() || '未命名场景',
+    title:
+      command.title?.trim() ||
+      (command.action === 'addSceneObject' ? '新增内容' : '未命名场景'),
     elementCount: command.elements.length,
     groupCount: groups.size,
     groups: Array.from(groups.values()),

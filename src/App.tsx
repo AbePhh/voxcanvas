@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import './App.css'
 import {
+  applyAddSceneObjectCommand,
   applyClearCommand,
   applyCreateCommand,
   applyDeleteCommand,
@@ -115,6 +116,9 @@ function App() {
           break
         case 'scene':
           nextState = applySceneCommand(current, command)
+          break
+        case 'addSceneObject':
+          nextState = applyAddSceneObjectCommand(current, command)
           break
         case 'clear':
           nextState = applyClearCommand(current)

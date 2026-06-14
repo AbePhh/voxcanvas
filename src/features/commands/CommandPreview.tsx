@@ -58,6 +58,12 @@ function formatCommand(command: ParsedCommand) {
     } elements`
   }
 
+  if (command.action === 'addSceneObject') {
+    return `Add ${command.objectLabel ?? command.title ?? 'content'} with ${
+      command.elements.length
+    } elements`
+  }
+
   return command.action
 }
 
@@ -70,7 +76,9 @@ export function CommandPreview({ command }: CommandPreviewProps) {
           <p className={command.action === 'unknown' ? 'parse-error' : 'parse-ok'}>
             {formatCommand(command)}
           </p>
-          {command.action === 'scene' ? <ScenePlanPreview command={command} /> : null}
+          {command.action === 'scene' || command.action === 'addSceneObject' ? (
+            <ScenePlanPreview command={command} />
+          ) : null}
           <pre>{JSON.stringify(command, null, 2)}</pre>
         </>
       ) : (

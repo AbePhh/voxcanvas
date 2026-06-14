@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { CanvasState } from '../canvas/types'
 import {
+  applyAddSceneObjectCommand,
   applyCreateCommand,
   applyMoveCommand,
   applySceneCommand,
@@ -108,6 +109,49 @@ describe('createPreciseExecutionFeedback', () => {
       metrics: expect.arrayContaining([
         { label: '新增图形', value: '2 个' },
         { label: '语义对象', value: '1 组' },
+      ]),
+    })
+  })
+
+  it('summarizes incremental scene object additions separately from full scenes', () => {
+    const command: ParsedCommand = {
+      action: 'addSceneObject',
+      title: '新增树',
+      objectLabel: '树',
+      anchor: {
+        groupLabel: '房子',
+        relation: 'right-of',
+      },
+      sourceText: '在房子的右边再生成一棵树',
+      elements: [
+        {
+          id: 'tree-trunk',
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树干',
+          shape: 'rect',
+          color: 'orange',
+          bbox: { x: 680, y: 350, width: 48, height: 130 },
+        },
+        {
+          id: 'tree-crown',
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树冠',
+          shape: 'circle',
+          color: 'green',
+          bbox: { x: 625, y: 245, width: 158, height: 158 },
+        },
+      ],
+    }
+    const after = applyAddSceneObjectCommand(emptyCanvas, command)
+
+    expect(createPreciseExecutionFeedback(command, emptyCanvas, after)).toMatchObject({
+      title: '新增内容完成',
+      summary: '已新增树，追加 2 个基础图形，参考房子（在右侧）。',
+      metrics: expect.arrayContaining([
+        { label: '新增内容', value: '树' },
+        { label: '新增图形', value: '2 个' },
       ]),
     })
   })

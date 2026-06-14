@@ -80,7 +80,99 @@ const plannerRequestSchema = z.object({
 
 app.use(express.json({ limit: '128kb' }))
 
+const explicitPrimitiveShapePattern =
+  /圆形|圆圈|圆|矩形|长方形|正方形|方块|三角形|三角|线条|直线|文本|文字|文本框/
+const createIntentPattern = /画|绘制|创建|添加|生成|新增|加|放|插入/
+const incrementalAdditionPattern =
+  /再|再来|添加|新增|加一|加个|加一个|放一|放个|放一个|插入|右边|左边|旁边|附近|上面|下面|周围/
+const wholeSceneResetPattern = /重新|重画|整个|完整|从头|新场景|全新场景/
+
+function normalizeIntentText(text) {
+  return text.replace(/\s+/g, '').replace(/[，。！？、,.!?；;：:"“”'‘’（）()]/g, '')
+}
+
+function requestsSemanticObject(input) {
+  const text = normalizeIntentText(input.sourceText)
+  const localParserEscalatedSemanticObject =
+    input.localCommand?.action === 'unknown' &&
+    input.localCommand?.reason === 'planner-required-scene-or-shape'
+
+  return (
+    createIntentPattern.test(text) &&
+    !explicitPrimitiveShapePattern.test(text) &&
+    (localParserEscalatedSemanticObject || text.length >= 4)
+  )
+}
+
+function getPlannerPolicy(input) {
+  const text = normalizeIntentText(input.sourceText)
+  const existingSemanticGroups = (input.canvas.semanticGroups ?? []).map((group) => ({
+    groupId: group.groupId,
+    groupLabel: group.groupLabel,
+    displayLabel: group.displayLabel,
+    referenceLabels: group.referenceLabels,
+    bounds: group.bounds,
+  }))
+  const requiresAddSceneObject =
+    input.canvas.objects.length > 0 &&
+    requestsSemanticObject(input) &&
+    incrementalAdditionPattern.test(text) &&
+    !wholeSceneResetPattern.test(text)
+
+  return {
+    requiresAddSceneObject,
+    requestedSemanticObject: requestsSemanticObject(input),
+    existingSemanticGroups,
+    rule: requiresAddSceneObject
+      ? 'Return addSceneObject only. Do not return scene or create. elements must contain only the newly added object/content.'
+      : 'Choose scene for whole-scene creation, addSceneObject for incremental semantic additions, create only for explicit primitive shapes.',
+  }
+}
+
+function getPolicyViolation(rawCommand, policy) {
+  if (!rawCommand || typeof rawCommand !== 'object') {
+    return 'planner-output-must-be-json-command'
+  }
+
+  if (
+    policy.requiresAddSceneObject &&
+    rawCommand.action !== 'addSceneObject' &&
+    rawCommand.action !== 'scene'
+  ) {
+    return `incremental semantic addition must use addSceneObject, not ${rawCommand.action}`
+  }
+
+  if (policy.requestedSemanticObject && rawCommand.action === 'create') {
+    return 'semantic additions must be decomposed into addSceneObject or scene elements, not reduced to one primitive create command'
+  }
+
+  return null
+}
+
+function buildPlannerRetryPrompt(input, rawCommand, violation, attempt) {
+  const policy = getPlannerPolicy(input)
+
+  return [
+    `Your previous JSON violates VoxCanvas command policy: ${violation}.`,
+    `Correction attempt ${attempt}. Return a corrected JSON command only.`,
+    'For this user command, the expected action is addSceneObject.',
+    'The corrected command must add only the newly requested content and must not include existing canvas objects.',
+    'Do not output create for semantic objects, components, or scene content. create is only for explicit primitive shapes such as 圆形, 矩形, 三角形, 线条, or 文本.',
+    'Do not output scene unless the user explicitly asks for a whole new scene.',
+    'If the command follows "在 <existing object> <relation> 再加/放/生成 <new object>", the existing object is the anchor and the new object is objectLabel.',
+    'Examples of this pattern:',
+    '- "在太阳下面再加一朵云" -> action addSceneObject, objectLabel "云", anchor { groupLabel: "太阳", relation: "below" }, elements only for the new cloud.',
+    '- "在桥上面再放一只鸟" -> action addSceneObject, objectLabel "鸟", anchor { groupLabel: "桥", relation: "above" }, elements only for the new bird.',
+    'The elements array must decompose the new semantic object into editable primitive parts with groupId, groupLabel, partLabel, shape, color, bbox, and zIndex.',
+    `User command: ${input.sourceText}`,
+    `Policy: ${JSON.stringify(policy)}`,
+    `Previous JSON: ${JSON.stringify(rawCommand)}`,
+  ].join('\n')
+}
+
 function buildPlannerPrompt(input) {
+  const policy = getPlannerPolicy(input)
+
   return [
     'You are the AI command normalizer for VoxCanvas, a voice-controlled SVG drawing tool.',
     'Your job is to correct noisy speech-recognition text and normalize casual user language into exactly one supported JSON command.',
@@ -97,6 +189,7 @@ function buildPlannerPrompt(input) {
     '- resizeCanvas absolute: { action, mode: "absolute", width, height, anchor?, sourceText }',
     '- resizeCanvas relative: { action, mode: "relative", direction, anchor?, amount?, sourceText }',
     '- scene: { action: "scene", title?, sourceText, elements: [{ id, groupId?, groupLabel?, partLabel?, shape, color, bbox, zIndex?, text? }] }',
+    '- addSceneObject: { action: "addSceneObject", title?, objectLabel?, anchor?, sourceText, elements: [{ id, groupId?, groupLabel?, partLabel?, shape, color, bbox, zIndex?, text? }] }',
     '- undo / redo / clear: { action, sourceText }',
     '',
     'Optional correction metadata:',
@@ -115,6 +208,8 @@ function buildPlannerPrompt(input) {
     'Allowed canvas resize anchors: center, left, right, top, bottom, top-left, top-right, bottom-left, bottom-right.',
     'Allowed target modes: selected, last, shape, position, any, semantic.',
     'Targets may include filters: { mode, id?, shape?, color?, position?, groupId?, groupLabel?, partLabel? }.',
+    'Allowed addSceneObject anchor relations: left-of, right-of, above, below, near, inside, around.',
+    'addSceneObject anchor may include { groupId?, groupLabel?, partLabel?, relation? } to explain what existing object the new content is placed relative to.',
     'Use target mode "semantic" when editing AI-generated scene graph objects or parts by their labels.',
     'Semantic target examples: { mode: "semantic", groupLabel: "房子" } edits the whole house group; { mode: "semantic", groupLabel: "房子", partLabel: "屋顶" } edits only the roof.',
     'Canvas context includes semanticGroups. When the user refers to a displayed duplicate label, ordinal phrase, or reference label such as "树 2", "第二棵树", or "tree-2", copy that groupId into the target.',
@@ -128,11 +223,20 @@ function buildPlannerPrompt(input) {
     '- Use the local parser result as a hint, not as authority. If it is unsafe, incomplete, or clearly caused by noisy speech, normalize to the best supported command.',
     '- If the user intent is unclear, ambiguous, unsafe, or unsupported, return { "action": "unknown", "reason": "unsupported-action", "sourceText": original text }.',
     '- If the user edits a scene object and one semanticGroups entry clearly matches their wording, include its groupId in the semantic target. If several entries still match and none is selected, return a semantic target without groupId so the UI can ask for clarification.',
-    '- For complex multi-object scene requests, prefer action "scene" instead of forcing the request into a single create command.',
+    '- Use action "scene" only when the user asks to create, draw, or regenerate a whole scene or composition from scratch.',
+    '- Use action "addSceneObject" when the user asks to add, insert, place, generate another, create one more, or put a semantic object/content onto an existing canvas. Chinese cues include "再", "再来", "添加", "新增", "加一个", "放一个", "在...旁边", "在...右边", "在...左边".',
+    '- For addSceneObject, elements must contain only the newly added object/content. Do not repeat existing houses, trees, suns, ground, labels, or other canvas objects unless the user explicitly asks to duplicate that exact object.',
+    '- For addSceneObject, use objectLabel for the requested content, for example "树", "太阳", "云", "花". Use anchor to reference an existing semantic group when the user says relative phrases such as "房子右边".',
+    '- In "在 A 的 下面/上面/左边/右边/旁边 再加/放/生成 B" commands, A is the anchor and B is the new objectLabel. Do not confuse the anchor with the added object.',
+    '- Example mappings: "在太阳下面再加一朵云" means add a new cloud below the existing sun; "在房子左边再放一辆车" means add a new car left of the existing house.',
+    '- Never return a single create command for an added semantic object such as 云, 树, 车, 鸟, 桥, 花, 机器人, or other user-named content. Decompose it into scene elements and preserve semantic grouping.',
+    '- For complex multi-object scene requests on a blank or intentionally new composition, prefer action "scene" instead of forcing the request into a single create command.',
     '- A scene must be decomposed into editable primitive elements. Do not output bitmap images, SVG strings, paths, CSS, external assets, or template names.',
+    '- addSceneObject must also be decomposed into editable primitive elements using the same element schema as scene.',
     '- Scene elements must use normalized bbox coordinates inside sceneSpace. bbox uses top-left origin: { x, y, width, height }.',
     '- Preserve semantic grouping with groupId, groupLabel, and partLabel. Example: a house may have wall, roof, and door elements sharing groupId "house-1".',
     '- When adding new scene objects to an existing canvas, do not reuse any existing canvas object groupId. Use a new groupId such as "tree-2" for a second tree. If modifying an existing object, return an edit command with a semantic target instead of a scene command.',
+    '- When addSceneObject references an existing object, use Canvas context semanticGroups and bounds to place the new elements near the requested anchor. The anchor object itself must not appear in elements.',
     '- Use zIndex for layering; higher zIndex appears above lower zIndex.',
     '- Keep scene elements visually balanced and inside sceneSpace. Do not exceed sceneCapabilities.maxElements.',
     '- Scene output should be complete, recognizable, and editable. Complex scenes should not collapse into one element unless the user truly requested one simple object.',
@@ -149,12 +253,21 @@ function buildPlannerPrompt(input) {
     '- Example: "话不左边宽一点" -> { "action": "resizeCanvas", "mode": "relative", "direction": "wider", "anchor": "left", "amount": 120, "sourceText": original text, "correction": { "correctedText": "画布左边宽一点", "interpretedIntent": "从左侧增加画布宽度约 120px", "explanation": "将“话不”纠正为“画布”", "confidence": "high" } }.',
     '- Example: "把绿的圆挪右上一点" -> target { mode: "shape", shape: "circle", color: "green" }, mode "absolute", position "top-right".',
     '- Example: "画一间房子，旁边有一棵树，右上角有太阳" -> return action "scene" with primitive rect, triangle, circle, and line elements using bbox coordinates in sceneSpace.',
+    '- Example: "在房子的右边再生成一棵树" when the canvas already has 房子 -> return action "addSceneObject" with objectLabel "树", anchor { "groupLabel": "房子", "relation": "right-of" }, and only the new tree trunk/crown elements using a new groupId such as "tree-2".',
+    '- Example: "在太阳下面再加一朵云" when the canvas already has 太阳 -> return action "addSceneObject" with objectLabel "云", anchor { "groupLabel": "太阳", "relation": "below" }, and only the new cloud elements using groupLabel "云".',
+    '- Example: "旁边再放一个太阳" when the canvas already has content -> return action "addSceneObject" with objectLabel "太阳" and only new sun elements. Do not include existing scene elements.',
     '- Example: "画一个生日派对，有蛋糕、气球和桌子" -> return action "scene" with primitive shapes grouped as cake, balloons, and table when it can be approximated safely.',
     '- Use target color only to identify existing objects; use command color to set a new color.',
     '- For canvas resize commands, use anchor to describe where space is added or removed. Examples: "左边多一点空间" -> direction wider, anchor left; "下面留白多一点" -> direction taller, anchor bottom; "内容保持中间" -> anchor center.',
     '',
     'High-quality scene graph examples:',
     buildSceneFewShotPrompt(),
+    '',
+    'App-level command policy:',
+    JSON.stringify(policy),
+    policy.requiresAddSceneObject
+      ? 'IMPORTANT: This user command is an incremental semantic addition. You MUST return action "addSceneObject". Do not return "scene" or "create".'
+      : 'IMPORTANT: Use "create" only for explicit primitive shapes. Use "scene" for whole scenes. Use "addSceneObject" for adding semantic objects/content to an existing canvas.',
     '',
     `User command: ${input.sourceText}`,
     `Local parser result: ${JSON.stringify(input.localCommand ?? null)}`,
@@ -183,7 +296,7 @@ app.post('/api/plan-command', async (request, response) => {
     return
   }
 
-  try {
+  async function requestPlannerCommand(messages) {
     const deepSeekResponse = await fetch('https://api.deepseek.com/chat/completions', {
       method: 'POST',
       headers: {
@@ -194,41 +307,97 @@ app.post('/api/plan-command', async (request, response) => {
         model: deepSeekModel,
         response_format: { type: 'json_object' },
         temperature: 0,
-        messages: [
-          {
-            role: 'system',
-            content:
-              'You correct noisy voice commands and decompose complex scenes into strict JSON commands for a drawing application. Return JSON only.',
-          },
-          {
-            role: 'user',
-            content: buildPlannerPrompt(parsedBody.data),
-          },
-        ],
+        messages,
       }),
     })
 
     if (!deepSeekResponse.ok) {
       const errorText = await deepSeekResponse.text()
-      response.status(502).json({
+      return {
+        ok: false,
         error: 'planner-upstream-error',
         details: errorText,
-      })
-      return
+      }
     }
 
     const result = await deepSeekResponse.json()
     const content = result?.choices?.[0]?.message?.content
 
     if (typeof content !== 'string') {
-      response.status(502).json({
+      return {
+        ok: false,
         error: 'planner-empty-response',
+      }
+    }
+
+    return {
+      ok: true,
+      rawCommand: JSON.parse(content),
+    }
+  }
+
+  try {
+    const baseMessages = [
+      {
+        role: 'system',
+        content:
+          'You correct noisy voice commands, distinguish whole-scene creation from incremental content additions, and return strict JSON commands for a drawing application. Return JSON only.',
+      },
+      {
+        role: 'user',
+        content: buildPlannerPrompt(parsedBody.data),
+      },
+    ]
+    let plannerResult = await requestPlannerCommand(baseMessages)
+
+    if (!plannerResult.ok) {
+      response.status(502).json({
+        error: plannerResult.error,
+        details: plannerResult.details,
       })
       return
     }
 
+    const policy = getPlannerPolicy(parsedBody.data)
+    let violation = getPolicyViolation(plannerResult.rawCommand, policy)
+    let retryCount = 0
+
+    while (violation && retryCount < 2) {
+      retryCount += 1
+      plannerResult = await requestPlannerCommand([
+        ...baseMessages,
+        {
+          role: 'assistant',
+          content: JSON.stringify(plannerResult.rawCommand),
+        },
+        {
+          role: 'user',
+          content: buildPlannerRetryPrompt(
+            parsedBody.data,
+            plannerResult.rawCommand,
+            violation,
+            retryCount,
+          ),
+        },
+      ])
+
+      if (!plannerResult.ok) {
+        response.status(502).json({
+          error: plannerResult.error,
+          details: plannerResult.details,
+        })
+        return
+      }
+
+      // The client validator can normalize some safe-but-imperfect planner output
+      // (for example, a scene graph returned for an incremental add request).
+      // Avoid blocking here after the retry; return the JSON and let the typed
+      // validator decide whether it can be executed.
+      violation = getPolicyViolation(plannerResult.rawCommand, policy)
+    }
+
     response.json({
-      rawCommand: JSON.parse(content),
+      rawCommand: plannerResult.rawCommand,
     })
   } catch (error) {
     response.status(500).json({
