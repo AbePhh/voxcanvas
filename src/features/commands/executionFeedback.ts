@@ -1,6 +1,12 @@
 import { colorStyles, matchesCommandColor } from '../canvas/colorStyles'
 import type { CanvasState, ShapeObject } from '../canvas/types'
-import { colorLabels, positionLabels, shapeLabels } from './commandLabels'
+import {
+  alignAxisLabels,
+  arrangeLayoutLabels,
+  colorLabels,
+  positionLabels,
+  shapeLabels,
+} from './commandLabels'
 import type { CommandColor, CommandPosition, ParsedCommand } from './types'
 import type {
   CommandExecutionFeedback,
@@ -472,6 +478,72 @@ function createResizeFeedback(
   )
 }
 
+function createAlignFeedback(
+  command: Extract<ParsedCommand, { action: 'align' }>,
+  before: CanvasState,
+  after: CanvasState,
+  context: CommandExecutionFeedbackContext,
+) {
+  const movedPairs = getChangedShapePairs(before, after).filter(
+    (pair) => pair.before.x !== pair.after.x || pair.before.y !== pair.after.y,
+  )
+  const afterBounds = getBounds(movedPairs.map((pair) => pair.after))
+
+  if (!afterBounds) {
+    return createNoChangeFeedback(command, context)
+  }
+
+  const targetText = describeShapeSet(movedPairs.map((pair) => pair.after))
+
+  return createFeedback(
+    'executed',
+    '对齐完成',
+    `已将${targetText}${alignAxisLabels[command.axis]}。`,
+    {
+      ...context,
+      metrics: [
+        { label: '方式', value: alignAxisLabels[command.axis] },
+        { label: '影响对象', value: `${movedPairs.length} 个` },
+        { label: '覆盖区域', value: formatSize(afterBounds) },
+        { label: '中心', value: formatCenter(afterBounds) },
+      ],
+    },
+  )
+}
+
+function createArrangeFeedback(
+  command: Extract<ParsedCommand, { action: 'arrange' }>,
+  before: CanvasState,
+  after: CanvasState,
+  context: CommandExecutionFeedbackContext,
+) {
+  const movedPairs = getChangedShapePairs(before, after).filter(
+    (pair) => pair.before.x !== pair.after.x || pair.before.y !== pair.after.y,
+  )
+  const afterBounds = getBounds(movedPairs.map((pair) => pair.after))
+
+  if (!afterBounds) {
+    return createNoChangeFeedback(command, context)
+  }
+
+  const targetText = describeShapeSet(movedPairs.map((pair) => pair.after))
+
+  return createFeedback(
+    'executed',
+    '排列完成',
+    `已将${targetText}${arrangeLayoutLabels[command.layout]}，间距约 ${formatPixels(command.spacing ?? 32)}。`,
+    {
+      ...context,
+      metrics: [
+        { label: '方式', value: arrangeLayoutLabels[command.layout] },
+        { label: '间距', value: formatPixels(command.spacing ?? 32) },
+        { label: '影响对象', value: `${movedPairs.length} 个` },
+        { label: '覆盖区域', value: formatSize(afterBounds) },
+      ],
+    },
+  )
+}
+
 function createCanvasResizeFeedback(
   command: Extract<ParsedCommand, { action: 'resizeCanvas' }>,
   before: CanvasState,
@@ -660,6 +732,14 @@ export function createPreciseExecutionFeedback(
 
   if (command.action === 'resize') {
     return createResizeFeedback(command, before, after, context)
+  }
+
+  if (command.action === 'align') {
+    return createAlignFeedback(command, before, after, context)
+  }
+
+  if (command.action === 'arrange') {
+    return createArrangeFeedback(command, before, after, context)
   }
 
   if (command.action === 'resizeCanvas') {

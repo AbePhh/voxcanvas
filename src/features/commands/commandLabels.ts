@@ -1,5 +1,5 @@
 import type { ShapeKind } from '../canvas/types'
-import type { CommandColor, CommandPosition } from './types'
+import type { AlignAxis, ArrangeLayout, CommandColor, CommandPosition } from './types'
 
 export const shapeLabels: Record<ShapeKind, string> = {
   circle: '圆形',
@@ -31,4 +31,18 @@ export const positionLabels: Record<CommandPosition, string> = {
   'bottom-left': '左下方',
   bottom: '下方',
   'bottom-right': '右下方',
+}
+
+export const alignAxisLabels: Record<AlignAxis, string> = {
+  left: '左对齐',
+  center: '水平居中对齐',
+  right: '右对齐',
+  top: '顶部对齐',
+  middle: '垂直居中对齐',
+  bottom: '底部对齐',
+}
+
+export const arrangeLayoutLabels: Record<ArrangeLayout, string> = {
+  row: '排成一行',
+  column: '排成一列',
 }

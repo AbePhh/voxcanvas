@@ -1,5 +1,7 @@
 import type {
   AddSceneObjectCommand,
+  AlignShapeCommand,
+  ArrangeShapeCommand,
   BatchCommand,
   BatchStepCommand,
   CanvasResizeAnchor,
@@ -15,8 +17,9 @@ import type {
 import { colorStyles } from './colorStyles'
 import {
   positionAnchors,
-  resolveTargetSelection,
+  resolveTargetUnits,
 } from './targetMatching'
+import type { TargetUnit } from './targetMatching'
 import { createShapesFromSceneCommand } from './sceneGraph'
 import type { CanvasSnapshot, CanvasState, ShapeObject } from './types'
 
@@ -125,8 +128,15 @@ function getShapePosition(
 }
 
 function findTargetShapes(state: CanvasState, target: CommandTarget) {
-  const result = resolveTargetSelection(state, target)
-  return result.status === 'matched' ? result.shapes : []
+  const result = resolveTargetUnits(state, target)
+  return result.status === 'matched'
+    ? result.units.flatMap((unit) => unit.shapes)
+    : []
+}
+
+function findTargetUnits(state: CanvasState, target: CommandTarget) {
+  const result = resolveTargetUnits(state, target)
+  return result.status === 'matched' ? result.units : []
 }
 
 function getSharedGroupId(shapes: ShapeObject[]) {
@@ -177,6 +187,10 @@ function getShapesBounds(shapes: ShapeObject[]) {
     width: maxX - minX,
     height: maxY - minY,
   }
+}
+
+function getUnitsBounds(units: TargetUnit[]) {
+  return getShapesBounds(units.flatMap((unit) => unit.shapes))
 }
 
 function clampGroupDelta(
@@ -304,6 +318,138 @@ function resizeShapeAroundBounds(
       : undefined,
     x: Math.round(nextCenterX - nextWidth / 2),
     y: Math.round(nextCenterY - nextHeight / 2),
+  }
+}
+
+function moveUnitShapes(unit: TargetUnit, delta: { x: number; y: number }) {
+  return unit.shapes.map((shape) => ({
+    ...shape,
+    x: shape.x + delta.x,
+    y: shape.y + delta.y,
+  }))
+}
+
+function getUnitAlignDelta(
+  unit: TargetUnit,
+  axis: AlignShapeCommand['axis'],
+  anchorBounds: ReturnType<typeof getShapesBounds>,
+) {
+  if (axis === 'left') {
+    return { x: anchorBounds.x - unit.bounds.x, y: 0 }
+  }
+
+  if (axis === 'right') {
+    return {
+      x: anchorBounds.x + anchorBounds.width - unit.bounds.x - unit.bounds.width,
+      y: 0,
+    }
+  }
+
+  if (axis === 'center') {
+    return {
+      x:
+        anchorBounds.x +
+        anchorBounds.width / 2 -
+        unit.bounds.x -
+        unit.bounds.width / 2,
+      y: 0,
+    }
+  }
+
+  if (axis === 'top') {
+    return { x: 0, y: anchorBounds.y - unit.bounds.y }
+  }
+
+  if (axis === 'bottom') {
+    return {
+      x: 0,
+      y: anchorBounds.y + anchorBounds.height - unit.bounds.y - unit.bounds.height,
+    }
+  }
+
+  return {
+    x: 0,
+    y:
+      anchorBounds.y +
+      anchorBounds.height / 2 -
+      unit.bounds.y -
+      unit.bounds.height / 2,
+  }
+}
+
+function getArrangeSpacing(spacing: number | undefined) {
+  return Math.max(0, Math.min(Math.round(spacing ?? 32), 240))
+}
+
+function sortUnitsForArrangement(units: TargetUnit[], layout: ArrangeShapeCommand['layout']) {
+  return [...units].sort((left, right) =>
+    layout === 'row'
+      ? left.bounds.x - right.bounds.x || left.bounds.y - right.bounds.y
+      : left.bounds.y - right.bounds.y || left.bounds.x - right.bounds.x,
+  )
+}
+
+function getArrangeDeltas(
+  units: TargetUnit[],
+  command: ArrangeShapeCommand,
+) {
+  const orderedUnits = sortUnitsForArrangement(units, command.layout)
+  const spacing = getArrangeSpacing(command.spacing)
+  const bounds = getUnitsBounds(units)
+  const centerX = bounds.x + bounds.width / 2
+  const centerY = bounds.y + bounds.height / 2
+  const totalWidth =
+    orderedUnits.reduce((sum, unit) => sum + unit.bounds.width, 0) +
+    spacing * Math.max(0, orderedUnits.length - 1)
+  const totalHeight =
+    orderedUnits.reduce((sum, unit) => sum + unit.bounds.height, 0) +
+    spacing * Math.max(0, orderedUnits.length - 1)
+  let cursorX = Math.round(centerX - totalWidth / 2)
+  let cursorY = Math.round(centerY - totalHeight / 2)
+
+  return orderedUnits.map((unit) => {
+    if (command.layout === 'row') {
+      const delta = {
+        x: cursorX - unit.bounds.x,
+        y: Math.round(centerY - unit.bounds.height / 2 - unit.bounds.y),
+      }
+
+      cursorX += unit.bounds.width + spacing
+      return { unit, delta }
+    }
+
+    const delta = {
+      x: Math.round(centerX - unit.bounds.width / 2 - unit.bounds.x),
+      y: cursorY - unit.bounds.y,
+    }
+
+    cursorY += unit.bounds.height + spacing
+    return { unit, delta }
+  })
+}
+
+function applyShapeUpdates(
+  state: CanvasState,
+  target: CommandTarget,
+  updatedShapes: ShapeObject[],
+) {
+  if (updatedShapes.length === 0) {
+    return state
+  }
+
+  const updatedShapeById = new Map(updatedShapes.map((shape) => [shape.id, shape]))
+  const targetShapes = updatedShapes
+
+  return {
+    ...state,
+    future: [],
+    history: [...state.history, takeSnapshot(state)],
+    selectedId: targetShapes.at(-1)?.id,
+    selectedGroupId:
+      targetShapes.length > 1 || target.mode === 'semantic'
+        ? getSharedGroupId(targetShapes)
+        : undefined,
+    shapes: state.shapes.map((shape) => updatedShapeById.get(shape.id) ?? shape),
   }
 }
 
@@ -501,32 +647,74 @@ export function applyResizeCommand(
   command: ResizeShapeCommand,
 ): CanvasState {
   const scale = command.direction === 'larger' ? 1.2 : 0.82
-  const targetShapes = findTargetShapes(state, command.target)
+  const targetUnits = findTargetUnits(state, command.target)
 
-  if (targetShapes.length === 0) {
+  if (targetUnits.length === 0) {
     return state
   }
 
-  const bounds = getShapesBounds(targetShapes)
-  const resizedShapes = targetShapes.map((shape) =>
-    resizeShapeAroundBounds(shape, bounds, scale),
+  const resizedShapes = targetUnits.flatMap((unit) =>
+    unit.shapes.map((shape) => resizeShapeAroundBounds(shape, unit.bounds, scale)),
   )
   const resizedBounds = getShapesBounds(resizedShapes)
   const correctionDelta = getBoundsDeltaInsideCanvas(state, resizedBounds)
-  const resizedShapeById = new Map(
-    resizedShapes.map((shape) => [
-      shape.id,
-      {
-        ...shape,
-        x: shape.x + correctionDelta.x,
-        y: shape.y + correctionDelta.y,
-      },
-    ]),
-  )
+  const correctedShapes = resizedShapes.map((shape) => ({
+    ...shape,
+    x: shape.x + correctionDelta.x,
+    y: shape.y + correctionDelta.y,
+  }))
 
-  return updateTargetShapes(state, command.target, (shape) =>
-    resizedShapeById.get(shape.id) ?? shape,
+  return applyShapeUpdates(state, command.target, correctedShapes)
+}
+
+export function applyAlignCommand(
+  state: CanvasState,
+  command: AlignShapeCommand,
+): CanvasState {
+  const targetUnits = findTargetUnits(state, command.target)
+
+  if (targetUnits.length < 2) {
+    return state
+  }
+
+  const anchorBounds = getUnitsBounds(targetUnits)
+  const movedShapes = targetUnits.flatMap((unit) =>
+    moveUnitShapes(
+      unit,
+      getUnitAlignDelta(unit, command.axis, anchorBounds),
+    ),
   )
+  const correctionDelta = getBoundsDeltaInsideCanvas(state, getShapesBounds(movedShapes))
+  const correctedShapes = movedShapes.map((shape) => ({
+    ...shape,
+    x: shape.x + correctionDelta.x,
+    y: shape.y + correctionDelta.y,
+  }))
+
+  return applyShapeUpdates(state, command.target, correctedShapes)
+}
+
+export function applyArrangeCommand(
+  state: CanvasState,
+  command: ArrangeShapeCommand,
+): CanvasState {
+  const targetUnits = findTargetUnits(state, command.target)
+
+  if (targetUnits.length < 2) {
+    return state
+  }
+
+  const movedShapes = getArrangeDeltas(targetUnits, command).flatMap(({ unit, delta }) =>
+    moveUnitShapes(unit, delta),
+  )
+  const correctionDelta = getBoundsDeltaInsideCanvas(state, getShapesBounds(movedShapes))
+  const correctedShapes = movedShapes.map((shape) => ({
+    ...shape,
+    x: shape.x + correctionDelta.x,
+    y: shape.y + correctionDelta.y,
+  }))
+
+  return applyShapeUpdates(state, command.target, correctedShapes)
 }
 
 function applyBatchStepCommand(
@@ -550,6 +738,12 @@ function applyBatchStepCommand(
       break
     case 'resize':
       nextState = applyResizeCommand(state, command)
+      break
+    case 'align':
+      nextState = applyAlignCommand(state, command)
+      break
+    case 'arrange':
+      nextState = applyArrangeCommand(state, command)
       break
     case 'resizeCanvas':
       nextState = applyResizeCanvasCommand(state, command)

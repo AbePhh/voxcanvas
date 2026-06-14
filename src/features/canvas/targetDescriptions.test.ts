@@ -423,4 +423,142 @@ describe('createTargetFeedback', () => {
       message: '没有找到匹配的红色三角形。请重新描述目标，或者先选中要编辑的图形。',
     })
   })
+
+  it('asks for clarification when counted align targets match too many shapes', () => {
+    const canvasState = {
+      width: 960,
+      height: 560,
+      selectedId: undefined,
+      selectedGroupId: undefined,
+      history: [],
+      future: [],
+      shapes: [
+        {
+          id: 'circle-1',
+          type: 'circle' as const,
+          x: 120,
+          y: 100,
+          width: 80,
+          height: 80,
+          fill: '#ef4444',
+          stroke: '#991b1b',
+        },
+        {
+          id: 'circle-2',
+          type: 'circle' as const,
+          x: 240,
+          y: 160,
+          width: 80,
+          height: 80,
+          fill: '#3b82f6',
+          stroke: '#1e40af',
+        },
+        {
+          id: 'circle-3',
+          type: 'circle' as const,
+          x: 360,
+          y: 220,
+          width: 80,
+          height: 80,
+          fill: '#facc15',
+          stroke: '#a16207',
+        },
+        {
+          id: 'circle-4',
+          type: 'circle' as const,
+          x: 480,
+          y: 280,
+          width: 80,
+          height: 80,
+          fill: '#22c55e',
+          stroke: '#166534',
+        },
+      ],
+    }
+
+    const feedback = createTargetFeedback(
+      {
+        action: 'align',
+        target: { mode: 'shape', shape: 'circle', scope: 'all', count: 3 },
+        axis: 'left',
+        sourceText: '让三个圆左对齐',
+      },
+      canvasState,
+    )
+
+    expect(feedback).toMatchObject({
+      status: 'ambiguous',
+      role: 'target',
+    })
+  })
+
+  it('prefers standalone primitive circles over scene parts for counted align targets', () => {
+    const canvasState = {
+      width: 960,
+      height: 560,
+      selectedId: undefined,
+      selectedGroupId: undefined,
+      history: [],
+      future: [],
+      shapes: [
+        {
+          id: 'circle-1',
+          type: 'circle' as const,
+          x: 120,
+          y: 100,
+          width: 80,
+          height: 80,
+          fill: '#ef4444',
+          stroke: '#991b1b',
+        },
+        {
+          id: 'circle-2',
+          type: 'circle' as const,
+          x: 240,
+          y: 160,
+          width: 80,
+          height: 80,
+          fill: '#3b82f6',
+          stroke: '#1e40af',
+        },
+        {
+          id: 'circle-3',
+          type: 'circle' as const,
+          x: 360,
+          y: 220,
+          width: 80,
+          height: 80,
+          fill: '#facc15',
+          stroke: '#a16207',
+        },
+        {
+          id: 'balloon-body',
+          type: 'circle' as const,
+          x: 520,
+          y: 140,
+          width: 90,
+          height: 90,
+          fill: '#22c55e',
+          stroke: '#166534',
+          groupId: 'balloon-1',
+          groupLabel: '气球',
+          partLabel: '主体',
+        },
+      ],
+    }
+
+    expect(
+      createTargetFeedback(
+        {
+          action: 'align',
+          target: { mode: 'shape', shape: 'circle', scope: 'all', count: 3 },
+          axis: 'left',
+          sourceText: '让三个圆左对齐',
+        },
+        canvasState,
+      ),
+    ).toMatchObject({
+      status: 'ok',
+    })
+  })
 })

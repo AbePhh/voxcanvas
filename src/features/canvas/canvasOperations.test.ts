@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   applyAddSceneObjectCommand,
+  applyAlignCommand,
+  applyArrangeCommand,
   applyBatchCommand,
   applyClearCommand,
   applyCreateCommand,
@@ -318,6 +320,208 @@ describe('canvasOperations', () => {
     })
 
     expect(resized.shapes[0].fontSize).toBeGreaterThan(withText.shapes[0].fontSize ?? 0)
+  })
+
+  it('recolors every matched semantic group when scope is all', () => {
+    const withBalloons: CanvasState = {
+      ...baseCanvas,
+      shapes: [
+        {
+          id: 'balloon-1-body',
+          type: 'circle',
+          x: 120,
+          y: 120,
+          width: 80,
+          height: 80,
+          fill: '#3b82f6',
+          stroke: '#1e40af',
+          groupId: 'balloon-1',
+          groupLabel: '气球',
+          partLabel: '主体',
+        },
+        {
+          id: 'balloon-2-body',
+          type: 'circle',
+          x: 260,
+          y: 160,
+          width: 80,
+          height: 80,
+          fill: '#22c55e',
+          stroke: '#166534',
+          groupId: 'balloon-2',
+          groupLabel: '气球',
+          partLabel: '主体',
+        },
+      ],
+    }
+
+    const recolored = applyRecolorCommand(withBalloons, {
+      action: 'recolor',
+      target: { mode: 'semantic', groupLabel: '气球', scope: 'all' },
+      color: 'red',
+      sourceText: '把所有气球变成红色',
+    })
+
+    expect(recolored.shapes.map((shape) => shape.fill)).toEqual(['#ef4444', '#ef4444'])
+    expect(recolored.history).toHaveLength(1)
+  })
+
+  it('resizes every semantic group independently for bulk resize commands', () => {
+    const withTrees: CanvasState = {
+      ...baseCanvas,
+      shapes: [
+        {
+          id: 'tree-1-trunk',
+          type: 'rect',
+          x: 150,
+          y: 240,
+          width: 40,
+          height: 120,
+          fill: '#f97316',
+          stroke: '#92400e',
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树干',
+        },
+        {
+          id: 'tree-1-crown',
+          type: 'circle',
+          x: 110,
+          y: 150,
+          width: 120,
+          height: 120,
+          fill: '#22c55e',
+          stroke: '#166534',
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树冠',
+        },
+        {
+          id: 'tree-2-trunk',
+          type: 'rect',
+          x: 520,
+          y: 240,
+          width: 40,
+          height: 120,
+          fill: '#f97316',
+          stroke: '#92400e',
+          groupId: 'tree-2',
+          groupLabel: '树',
+          partLabel: '树干',
+        },
+        {
+          id: 'tree-2-crown',
+          type: 'circle',
+          x: 480,
+          y: 150,
+          width: 120,
+          height: 120,
+          fill: '#22c55e',
+          stroke: '#166534',
+          groupId: 'tree-2',
+          groupLabel: '树',
+          partLabel: '树冠',
+        },
+      ],
+    }
+
+    const resized = applyResizeCommand(withTrees, {
+      action: 'resize',
+      target: { mode: 'semantic', groupLabel: '树', scope: 'all' },
+      direction: 'smaller',
+      sourceText: '把所有树缩小一点',
+    })
+    const firstTreeCenterBefore =
+      (Math.min(withTrees.shapes[0].x, withTrees.shapes[1].x) +
+        Math.max(
+          withTrees.shapes[0].x + withTrees.shapes[0].width,
+          withTrees.shapes[1].x + withTrees.shapes[1].width,
+        )) /
+      2
+    const secondTreeCenterBefore =
+      (Math.min(withTrees.shapes[2].x, withTrees.shapes[3].x) +
+        Math.max(
+          withTrees.shapes[2].x + withTrees.shapes[2].width,
+          withTrees.shapes[3].x + withTrees.shapes[3].width,
+        )) /
+      2
+    const firstTreeCenterAfter =
+      (Math.min(resized.shapes[0].x, resized.shapes[1].x) +
+        Math.max(
+          resized.shapes[0].x + resized.shapes[0].width,
+          resized.shapes[1].x + resized.shapes[1].width,
+        )) /
+      2
+    const secondTreeCenterAfter =
+      (Math.min(resized.shapes[2].x, resized.shapes[3].x) +
+        Math.max(
+          resized.shapes[2].x + resized.shapes[2].width,
+          resized.shapes[3].x + resized.shapes[3].width,
+        )) /
+      2
+
+    expect(resized.shapes[1].width).toBeLessThan(withTrees.shapes[1].width)
+    expect(Math.abs(firstTreeCenterAfter - firstTreeCenterBefore)).toBeLessThanOrEqual(1)
+    expect(Math.abs(secondTreeCenterAfter - secondTreeCenterBefore)).toBeLessThanOrEqual(1)
+  })
+
+  it('aligns and arranges counted primitive targets as separate units', () => {
+    const withCircles: CanvasState = {
+      ...baseCanvas,
+      shapes: [
+        {
+          id: 'circle-1',
+          type: 'circle',
+          x: 100,
+          y: 120,
+          width: 64,
+          height: 64,
+          fill: '#3b82f6',
+          stroke: '#1e40af',
+        },
+        {
+          id: 'circle-2',
+          type: 'circle',
+          x: 260,
+          y: 240,
+          width: 64,
+          height: 64,
+          fill: '#22c55e',
+          stroke: '#166534',
+        },
+        {
+          id: 'circle-3',
+          type: 'circle',
+          x: 440,
+          y: 160,
+          width: 64,
+          height: 64,
+          fill: '#facc15',
+          stroke: '#a16207',
+        },
+      ],
+    }
+
+    const aligned = applyAlignCommand(withCircles, {
+      action: 'align',
+      target: { mode: 'shape', shape: 'circle', scope: 'all', count: 3 },
+      axis: 'left',
+      sourceText: '让三个圆左对齐',
+    })
+
+    expect(new Set(aligned.shapes.map((shape) => shape.x)).size).toBe(1)
+
+    const arranged = applyArrangeCommand(withCircles, {
+      action: 'arrange',
+      target: { mode: 'shape', shape: 'circle', scope: 'all', count: 3 },
+      layout: 'row',
+      spacing: 20,
+      sourceText: '把三个圆排成一行',
+    })
+
+    expect(new Set(arranged.shapes.map((shape) => shape.y)).size).toBe(1)
+    expect(arranged.shapes[1].x - arranged.shapes[0].x).toBe(84)
+    expect(arranged.shapes[2].x - arranged.shapes[1].x).toBe(84)
   })
 
   it('adds canvas space on the right without moving existing shapes', () => {

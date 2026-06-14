@@ -1,5 +1,6 @@
 import type { ParsedCommand } from './types'
 import { ScenePlanPreview } from './ScenePlanPreview'
+import { alignAxisLabels, arrangeLayoutLabels } from './commandLabels'
 import './CommandPreview.css'
 
 type CommandPreviewProps = {
@@ -40,6 +41,14 @@ function formatCommand(command: ParsedCommand) {
 
   if (command.action === 'resize') {
     return `Resize ${command.target.mode} target ${command.direction}`
+  }
+
+  if (command.action === 'align') {
+    return `Align ${command.target.mode} target: ${alignAxisLabels[command.axis]}`
+  }
+
+  if (command.action === 'arrange') {
+    return `Arrange ${command.target.mode} target: ${arrangeLayoutLabels[command.layout]}`
   }
 
   if (command.action === 'delete') {

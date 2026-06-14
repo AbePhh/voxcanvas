@@ -48,6 +48,33 @@ export type TargetSelectionResult =
       matches: ShapeObject[]
     }
 
+export type TargetUnit = {
+  id: string
+  label?: string
+  shapes: ShapeObject[]
+  bounds: {
+    x: number
+    y: number
+    width: number
+    height: number
+  }
+}
+
+export type TargetUnitSelectionResult =
+  | {
+      status: 'matched'
+      units: TargetUnit[]
+      matches: ShapeObject[]
+    }
+  | {
+      status: 'missing'
+      matches: ShapeObject[]
+    }
+  | {
+      status: 'ambiguous'
+      matches: ShapeObject[]
+    }
+
 export function matchesTargetPosition(
   shape: Pick<ShapeObject, 'x' | 'y' | 'width' | 'height'>,
   canvas: Pick<CanvasState, 'width' | 'height'>,
@@ -103,11 +130,56 @@ export function matchesTargetFilters(
   return true
 }
 
+function shouldPreferPrimitiveShapeMatches(target: CommandTarget) {
+  return (
+    target.mode === 'shape' &&
+    Boolean(target.shape) &&
+    !target.id &&
+    !target.groupId &&
+    !target.groupLabel &&
+    !target.partLabel
+  )
+}
+
+function getTargetMatches(state: CanvasState, target: CommandTarget) {
+  const matches = state.shapes.filter((shape) =>
+    matchesTargetFilters(shape, target, state),
+  )
+
+  if (!shouldPreferPrimitiveShapeMatches(target)) {
+    return matches
+  }
+
+  const primitiveMatches = matches.filter(
+    (shape) => !shape.groupId && !shape.groupLabel && !shape.partLabel,
+  )
+
+  return primitiveMatches.length > 0 ? primitiveMatches : matches
+}
+
+function getShapesBounds(shapes: ShapeObject[]) {
+  const minX = Math.min(...shapes.map((shape) => shape.x))
+  const minY = Math.min(...shapes.map((shape) => shape.y))
+  const maxX = Math.max(...shapes.map((shape) => shape.x + shape.width))
+  const maxY = Math.max(...shapes.map((shape) => shape.y + shape.height))
+
+  return {
+    x: minX,
+    y: minY,
+    width: maxX - minX,
+    height: maxY - minY,
+  }
+}
+
 function normalizeSemanticTargetReference(
   state: CanvasState,
   target: CommandTarget,
 ): CommandTarget {
   if (target.mode !== 'semantic' || target.groupId || !target.groupLabel) {
+    return target
+  }
+
+  if (target.scope === 'all') {
     return target
   }
 
@@ -132,14 +204,114 @@ function normalizeSemanticTargetReference(
   }
 }
 
+function createTargetUnit(
+  id: string,
+  shapes: ShapeObject[],
+  label?: string,
+): TargetUnit {
+  return {
+    id,
+    label,
+    shapes,
+    bounds: getShapesBounds(shapes),
+  }
+}
+
+function createUnitsFromShapes(shapes: ShapeObject[], target: CommandTarget) {
+  if (shapes.length === 0) {
+    return []
+  }
+
+  if (target.mode !== 'semantic') {
+    return shapes.map((shape) =>
+      createTargetUnit(shape.id, [shape], shape.groupLabel ?? shape.id),
+    )
+  }
+
+  const groups = new Map<string, ShapeObject[]>()
+
+  for (const shape of shapes) {
+    const groupKey = shape.groupId ?? shape.groupLabel ?? shape.id
+    const partKey = target.partLabel ? shape.partLabel ?? shape.id : ''
+    const key = `${groupKey}:${partKey}`
+    const groupShapes = groups.get(key) ?? []
+
+    groupShapes.push(shape)
+    groups.set(key, groupShapes)
+  }
+
+  return Array.from(groups.entries()).map(([key, groupShapes]) => {
+    const representative = groupShapes[0]
+    const label = target.partLabel
+      ? [representative.groupLabel, target.partLabel].filter(Boolean).join('/')
+      : representative.groupLabel ?? representative.groupId ?? key
+
+    return createTargetUnit(key, groupShapes, label)
+  })
+}
+
+function filterTargetUnitsByCount(
+  units: TargetUnit[],
+  target: CommandTarget,
+): TargetUnitSelectionResult | null {
+  if (target.count === undefined) {
+    return null
+  }
+
+  if (units.length === target.count) {
+    return null
+  }
+
+  return {
+    status: units.length < target.count ? 'missing' : 'ambiguous',
+    matches: units.flatMap((unit) => unit.shapes),
+  }
+}
+
+function createTargetUnitResult(
+  units: TargetUnit[],
+  matches: ShapeObject[],
+  target: CommandTarget,
+): TargetUnitSelectionResult {
+  if (units.length === 0) {
+    return {
+      status: 'missing',
+      matches,
+    }
+  }
+
+  const countResult = filterTargetUnitsByCount(units, target)
+
+  if (countResult) {
+    return countResult
+  }
+
+  if (target.scope === 'all' || target.count !== undefined) {
+    return {
+      status: 'matched',
+      units,
+      matches,
+    }
+  }
+
+  return units.length === 1
+    ? {
+        status: 'matched',
+        units,
+        matches,
+      }
+    : {
+        status: 'ambiguous',
+        matches,
+      }
+}
+
 function resolveSemanticSelection(
   state: CanvasState,
   target: CommandTarget,
 ): TargetSelectionResult {
   const normalizedTarget = normalizeSemanticTargetReference(state, target)
-  const matchedShapes = state.shapes.filter((shape) =>
-    matchesTargetFilters(shape, normalizedTarget, state),
-  )
+  const matchedShapes = getTargetMatches(state, normalizedTarget)
 
   if (matchedShapes.length === 0) {
     return {
@@ -292,6 +464,72 @@ export function resolveTargetSelection(
   }
 }
 
+export function resolveTargetUnits(
+  state: CanvasState,
+  target: CommandTarget,
+): TargetUnitSelectionResult {
+  if (target.scope !== 'all' && target.count === undefined) {
+    const result = resolveTargetSelection(state, target)
+
+    return result.status === 'matched'
+      ? {
+          status: 'matched',
+          units: [createTargetUnit('selection', result.shapes, target.groupLabel)],
+          matches: result.matches,
+        }
+      : result
+  }
+
+  const normalizedTarget =
+    target.mode === 'semantic' ? normalizeSemanticTargetReference(state, target) : target
+
+  if (normalizedTarget.mode === 'selected') {
+    const selectedShapes =
+      state.selectedGroupId && canExpandSemanticReference(normalizedTarget)
+        ? getSemanticGroupShapes(state, state.selectedGroupId, normalizedTarget)
+        : state.shapes.filter(
+            (shape) =>
+              shape.id === state.selectedId &&
+              matchesTargetFilters(shape, normalizedTarget, state),
+          )
+
+    return createTargetUnitResult(
+      createUnitsFromShapes(selectedShapes, normalizedTarget),
+      selectedShapes,
+      normalizedTarget,
+    )
+  }
+
+  if (normalizedTarget.mode === 'last') {
+    const latestMatch = [...state.shapes]
+      .reverse()
+      .find((shape) => matchesTargetFilters(shape, normalizedTarget, state))
+
+    if (!latestMatch) {
+      return {
+        status: 'missing',
+        matches: [],
+      }
+    }
+
+    const latestShapes =
+      latestMatch.groupId && canExpandSemanticReference(normalizedTarget)
+        ? getSemanticGroupShapes(state, latestMatch.groupId, normalizedTarget)
+        : [latestMatch]
+
+    return createTargetUnitResult(
+      createUnitsFromShapes(latestShapes, normalizedTarget),
+      latestShapes,
+      normalizedTarget,
+    )
+  }
+
+  const matches = getTargetMatches(state, normalizedTarget)
+  const units = createUnitsFromShapes(matches, normalizedTarget)
+
+  return createTargetUnitResult(units, matches, normalizedTarget)
+}
+
 export function resolveTargetShape(
   state: CanvasState,
   target: CommandTarget,
@@ -315,9 +553,7 @@ export function resolveTargetShape(
         }
   }
 
-  const reversedMatches = [...state.shapes]
-    .reverse()
-    .filter((shape) => matchesTargetFilters(shape, target, state))
+  const reversedMatches = getTargetMatches(state, target).reverse()
 
   if (target.mode === 'selected') {
     const selectedShape = state.shapes.find((shape) => shape.id === state.selectedId)

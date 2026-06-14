@@ -7,7 +7,11 @@ import type {
 import { colorLabels, positionLabels, shapeLabels } from '../commands/commandLabels'
 import { describeSceneElement } from '../commands/scenePlan'
 import { colorStyles } from './colorStyles'
-import { matchesTargetPosition, resolveTargetSelection } from './targetMatching'
+import {
+  matchesTargetPosition,
+  resolveTargetSelection,
+  resolveTargetUnits,
+} from './targetMatching'
 import type { CanvasState, ShapeObject } from './types'
 
 export type TargetCandidate = {
@@ -199,7 +203,10 @@ function createSelectionFeedback(
   canvasState: CanvasState,
   options: { subject: '目标' | '参照物'; role: TargetFeedbackRole },
 ): TargetFeedback {
-  const result = resolveTargetSelection(canvasState, target)
+  const result =
+    target.scope === 'all' || target.count !== undefined
+      ? resolveTargetUnits(canvasState, target)
+      : resolveTargetSelection(canvasState, target)
 
   if (result.status === 'matched') {
     return {

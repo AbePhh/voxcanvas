@@ -10,7 +10,7 @@ import type { ShapeKind } from '../canvas/types'
 
 type EditableCommand = Extract<
   ParsedCommand,
-  { action: 'move' | 'recolor' | 'resize' | 'delete' }
+  { action: 'move' | 'recolor' | 'resize' | 'delete' | 'align' | 'arrange' }
 >
 
 export type PendingClarification = {
@@ -113,7 +113,9 @@ export function createPendingClarification(
     command.action !== 'move' &&
     command.action !== 'recolor' &&
     command.action !== 'resize' &&
-    command.action !== 'delete'
+    command.action !== 'delete' &&
+    command.action !== 'align' &&
+    command.action !== 'arrange'
   ) {
     return null
   }

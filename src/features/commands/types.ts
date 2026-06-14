@@ -13,6 +13,8 @@ export type CommandAction =
   | 'resizeCanvas'
   | 'scene'
   | 'addSceneObject'
+  | 'align'
+  | 'arrange'
   | 'batch'
   | 'unknown'
 
@@ -43,6 +45,8 @@ export type ExportFormat = 'png' | 'jpg' | 'svg'
 export type MoveDirection = 'left' | 'right' | 'up' | 'down'
 export type SpatialMoveRelation = 'left-of' | 'right-of' | 'above' | 'below'
 export type SpatialMoveAlignment = 'preserve' | 'center' | 'start' | 'end'
+export type AlignAxis = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom'
+export type ArrangeLayout = 'row' | 'column'
 
 export type CanvasResizeDirection =
   | 'larger'
@@ -82,6 +86,8 @@ export type CommandTarget = {
   groupId?: string
   groupLabel?: string
   partLabel?: string
+  scope?: 'one' | 'all'
+  count?: number
 }
 
 export type MoveShapeCommand =
@@ -128,6 +134,21 @@ export type ResizeShapeCommand = {
 export type DeleteShapeCommand = {
   action: 'delete'
   target: CommandTarget
+  sourceText: string
+}
+
+export type AlignShapeCommand = {
+  action: 'align'
+  target: CommandTarget
+  axis: AlignAxis
+  sourceText: string
+}
+
+export type ArrangeShapeCommand = {
+  action: 'arrange'
+  target: CommandTarget
+  layout: ArrangeLayout
+  spacing?: number
   sourceText: string
 }
 
@@ -207,6 +228,8 @@ export type BatchStepCommand =
   | RecolorShapeCommand
   | ResizeShapeCommand
   | DeleteShapeCommand
+  | AlignShapeCommand
+  | ArrangeShapeCommand
 
 export type BatchCommand = {
   action: 'batch'
@@ -232,6 +255,8 @@ export type SimpleCanvasCommand =
   | RecolorShapeCommand
   | ResizeShapeCommand
   | DeleteShapeCommand
+  | AlignShapeCommand
+  | ArrangeShapeCommand
   | BatchCommand
 
 export type UnknownCommand = {

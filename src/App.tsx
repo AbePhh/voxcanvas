@@ -2,6 +2,8 @@ import { useCallback, useMemo, useRef, useState } from 'react'
 import './App.css'
 import {
   applyAddSceneObjectCommand,
+  applyAlignCommand,
+  applyArrangeCommand,
   applyBatchCommand,
   applyClearCommand,
   applyCreateCommand,
@@ -111,6 +113,12 @@ function App() {
           break
         case 'resize':
           nextState = applyResizeCommand(current, command)
+          break
+        case 'align':
+          nextState = applyAlignCommand(current, command)
+          break
+        case 'arrange':
+          nextState = applyArrangeCommand(current, command)
           break
         case 'resizeCanvas':
           nextState = applyResizeCanvasCommand(current, command)
