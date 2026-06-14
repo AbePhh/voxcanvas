@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { shouldUseAiPlanner } from './aiPlanner'
+import { aiPlanner, shouldUseAiPlanner } from './aiPlanner'
 import type { ParsedCommand } from '../commands/types'
 
 describe('shouldUseAiPlanner', () => {
@@ -57,5 +57,104 @@ describe('shouldUseAiPlanner', () => {
 
   it('keeps simple geometry commands on the local path', () => {
     expect(shouldUseAiPlanner('画一个红色圆形', createCircleCommand)).toBe(false)
+  })
+
+  it('falls back to a validated align command when the upstream planner is too conservative', async () => {
+    const originalFetch = globalThis.fetch
+
+    globalThis.fetch = (() =>
+      Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            rawCommand: {
+              action: 'unknown',
+              reason: 'unsupported-action',
+              sourceText: '让三个圆左对齐',
+            },
+          }),
+      } as Response)) as typeof fetch
+
+    const result = await aiPlanner({
+      sourceText: '让三个圆左对齐',
+      localCommand: {
+        action: 'unknown',
+        reason: 'unsupported-action',
+        sourceText: '让三个圆左对齐',
+      },
+      sceneSpace: {
+        width: 1000,
+        height: 583,
+        origin: 'top-left',
+        unit: 'normalized',
+      },
+      sceneCapabilities: {
+        allowedShapes: ['circle', 'rect', 'triangle', 'line', 'text'],
+        allowedColors: [
+          'red',
+          'orange',
+          'yellow',
+          'green',
+          'blue',
+          'purple',
+          'black',
+          'white',
+          'gray',
+        ],
+        maxElements: 24,
+      },
+      canvas: {
+        width: 960,
+        height: 560,
+        objects: [
+          {
+            id: 'circle-1',
+            type: 'circle',
+            x: 120,
+            y: 100,
+            width: 80,
+            height: 80,
+            fill: '#ef4444',
+            text: undefined,
+          },
+          {
+            id: 'circle-2',
+            type: 'circle',
+            x: 280,
+            y: 180,
+            width: 80,
+            height: 80,
+            fill: '#3b82f6',
+            text: undefined,
+          },
+          {
+            id: 'circle-3',
+            type: 'circle',
+            x: 430,
+            y: 260,
+            width: 80,
+            height: 80,
+            fill: '#facc15',
+            text: undefined,
+          },
+        ],
+      },
+    })
+
+    expect(result).toMatchObject({
+      status: 'planned',
+      command: {
+        action: 'align',
+        target: {
+          mode: 'shape',
+          shape: 'circle',
+          scope: 'all',
+          count: 3,
+        },
+        axis: 'left',
+      },
+    })
+
+    globalThis.fetch = originalFetch
   })
 })

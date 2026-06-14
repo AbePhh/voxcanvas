@@ -1730,6 +1730,227 @@ describe('validatePlannedCommand', () => {
     })
   })
 
+  it('accepts bulk semantic recolor commands with explicit scope all', () => {
+    const canvasWithBalloons = {
+      ...canvasWithOneCircle,
+      semanticGroups: [
+        {
+          id: 'balloon-1',
+          groupId: 'balloon-1',
+          groupLabel: '气球',
+          displayLabel: '气球 1',
+          referenceLabels: ['气球 1', '第一只气球', 'balloon-1'],
+          partLabels: ['主体'],
+          objectIds: ['balloon-1-body'],
+          bounds: { x: 120, y: 120, width: 80, height: 80 },
+          selected: false,
+        },
+        {
+          id: 'balloon-2',
+          groupId: 'balloon-2',
+          groupLabel: '气球',
+          displayLabel: '气球 2',
+          referenceLabels: ['气球 2', '第二只气球', 'balloon-2'],
+          partLabels: ['主体'],
+          objectIds: ['balloon-2-body'],
+          bounds: { x: 260, y: 160, width: 80, height: 80 },
+          selected: false,
+        },
+      ],
+      objects: [
+        {
+          id: 'balloon-1-body',
+          type: 'circle' as const,
+          x: 120,
+          y: 120,
+          width: 80,
+          height: 80,
+          fill: '#3b82f6',
+          text: undefined,
+          groupId: 'balloon-1',
+          groupLabel: '气球',
+          partLabel: '主体',
+        },
+        {
+          id: 'balloon-2-body',
+          type: 'circle' as const,
+          x: 260,
+          y: 160,
+          width: 80,
+          height: 80,
+          fill: '#22c55e',
+          text: undefined,
+          groupId: 'balloon-2',
+          groupLabel: '气球',
+          partLabel: '主体',
+        },
+      ],
+    }
+
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'recolor',
+          target: { mode: 'semantic', groupLabel: '气球', scope: 'all' },
+          color: 'red',
+          sourceText: '把所有气球变成红色',
+        },
+        { canvas: canvasWithBalloons },
+      ),
+    ).toMatchObject({
+      status: 'planned',
+      command: {
+        action: 'recolor',
+        target: {
+          mode: 'semantic',
+          groupLabel: '气球',
+          scope: 'all',
+        },
+        color: 'red',
+      },
+    })
+  })
+
+  it('accepts align and arrange commands for counted primitive targets', () => {
+    const canvasWithThreeCircles = {
+      ...canvasWithOneCircle,
+      objects: [
+        {
+          id: 'circle-1',
+          type: 'circle' as const,
+          x: 100,
+          y: 120,
+          width: 80,
+          height: 80,
+          fill: '#3b82f6',
+          text: undefined,
+        },
+        {
+          id: 'circle-2',
+          type: 'circle' as const,
+          x: 240,
+          y: 240,
+          width: 80,
+          height: 80,
+          fill: '#22c55e',
+          text: undefined,
+        },
+        {
+          id: 'circle-3',
+          type: 'circle' as const,
+          x: 420,
+          y: 160,
+          width: 80,
+          height: 80,
+          fill: '#facc15',
+          text: undefined,
+        },
+      ],
+    }
+
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'align',
+          target: { mode: 'shape', shape: 'circle', scope: 'all', count: 3 },
+          axis: 'left',
+          sourceText: '让三个圆左对齐',
+        },
+        { canvas: canvasWithThreeCircles },
+      ),
+    ).toMatchObject({
+      status: 'planned',
+      command: {
+        action: 'align',
+        axis: 'left',
+      },
+    })
+
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'arrange',
+          target: { mode: 'shape', shape: 'circle', scope: 'all', count: 3 },
+          layout: 'row',
+          spacing: 32,
+          sourceText: '把三个圆排成一行',
+        },
+        { canvas: canvasWithThreeCircles },
+      ),
+    ).toMatchObject({
+      status: 'planned',
+      command: {
+        action: 'arrange',
+        layout: 'row',
+        spacing: 32,
+      },
+    })
+  })
+
+  it('rejects unsafe bulk targets and defers counted target mismatches to clarification', () => {
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'recolor',
+          target: { mode: 'any', scope: 'all' },
+          color: 'red',
+          sourceText: '全部改成红色',
+        },
+        { canvas: canvasWithOneCircle },
+      ),
+    ).toMatchObject({
+      status: 'invalid',
+      reason: 'unsafe-bulk-target',
+    })
+
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'arrange',
+          target: { mode: 'shape', shape: 'circle', scope: 'all', count: 3 },
+          layout: 'row',
+          sourceText: '把三个圆排成一行',
+        },
+        { canvas: canvasWithOneCircle },
+      ),
+    ).toMatchObject({
+      status: 'planned',
+      command: {
+        action: 'arrange',
+        target: {
+          count: 3,
+        },
+      },
+    })
+
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'batch',
+          sourceText: '把三个圆排成一行，然后变成红色',
+          commands: [
+            {
+              action: 'arrange',
+              target: { mode: 'shape', shape: 'circle', scope: 'all', count: 3 },
+              layout: 'row',
+              sourceText: '把三个圆排成一行',
+            },
+            {
+              action: 'recolor',
+              target: { mode: 'shape', shape: 'circle', scope: 'all', count: 3 },
+              color: 'red',
+              sourceText: '变成红色',
+            },
+          ],
+        },
+        { canvas: canvasWithOneCircle },
+      ),
+    ).toMatchObject({
+      status: 'invalid',
+      reason: 'invalid-batch-step-target-count-mismatch',
+    })
+  })
+
   it('rejects single-step planner output for multi-step utterances', () => {
     const canvasWithTreeAndHouse = {
       ...canvasWithOneCircle,

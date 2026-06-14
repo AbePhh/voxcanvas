@@ -1,6 +1,8 @@
 import type { ShapeKind } from '../canvas/types'
 import type {
   BatchStepCommand,
+  AlignAxis,
+  ArrangeLayout,
   CanvasResizeAnchor,
   CanvasResizeDirection,
   CommandColor,
@@ -43,6 +45,8 @@ const allowedActions = new Set([
   'resizeCanvas',
   'scene',
   'addSceneObject',
+  'align',
+  'arrange',
   'batch',
 ])
 const allowedBatchStepActions = new Set([
@@ -52,8 +56,11 @@ const allowedBatchStepActions = new Set([
   'resize',
   'delete',
   'resizeCanvas',
+  'align',
+  'arrange',
 ])
 const maxBatchCommandCount = 6
+const maxTargetCount = 24
 const allowedShapes = new Set<ShapeKind>(['circle', 'rect', 'triangle', 'line', 'text'])
 const allowedColors = new Set<CommandColor>([
   'red',
@@ -101,6 +108,15 @@ const allowedSpatialMoveAlignments = new Set<SpatialMoveAlignment>([
   'end',
 ])
 const allowedResizeDirections = new Set(['larger', 'smaller'])
+const allowedAlignAxes = new Set<AlignAxis>([
+  'left',
+  'center',
+  'right',
+  'top',
+  'middle',
+  'bottom',
+])
+const allowedArrangeLayouts = new Set<ArrangeLayout>(['row', 'column'])
 const allowedCanvasResizeDirections = new Set<CanvasResizeDirection>([
   'larger',
   'smaller',
@@ -550,6 +566,18 @@ function normalizeSpatialMoveGap(value: unknown) {
   return Math.max(0, Math.min(Math.round(value), 240))
 }
 
+function normalizeArrangeSpacing(value: unknown) {
+  if (value === undefined) {
+    return undefined
+  }
+
+  if (!isFiniteNumber(value)) {
+    return null
+  }
+
+  return Math.max(0, Math.min(Math.round(value), 240))
+}
+
 function normalizeCanvasResizeAnchor(value: unknown): CanvasResizeAnchor | undefined {
   if (value === undefined) {
     return undefined
@@ -591,6 +619,23 @@ function normalizeTarget(value: unknown): CommandTarget | null {
     return null
   }
 
+  const scope =
+    value.scope === undefined
+      ? undefined
+      : value.scope === 'one' || value.scope === 'all'
+        ? value.scope
+        : null
+  const count =
+    value.count === undefined
+      ? undefined
+      : isFiniteNumber(value.count)
+        ? Math.round(value.count)
+        : null
+
+  if (scope === null || count === null || (count !== undefined && (count < 1 || count > maxTargetCount))) {
+    return null
+  }
+
   const normalizedTarget: CommandTarget = {
     mode: value.mode as CommandTarget['mode'],
     id: typeof value.id === 'string' ? value.id : undefined,
@@ -600,6 +645,8 @@ function normalizeTarget(value: unknown): CommandTarget | null {
     groupId: normalizeSafeLabel(value.groupId, 48),
     groupLabel: normalizeSafeLabel(value.groupLabel),
     partLabel: normalizeSafeLabel(value.partLabel),
+    scope,
+    count,
   }
 
   if (
@@ -630,6 +677,8 @@ function normalizeSemanticTargetReference(
   if (
     !canvas ||
     target.mode !== 'semantic' ||
+    target.scope === 'all' ||
+    target.count !== undefined ||
     target.groupId ||
     !target.groupLabel
   ) {
@@ -664,6 +713,47 @@ function getSemanticGroupKey(
   object: CommandPlannerInput['canvas']['objects'][number],
 ) {
   return object.groupId ?? object.groupLabel ?? object.id
+}
+
+function targetRequestsMultiple(target: CommandTarget) {
+  return target.scope === 'all' || target.count !== undefined
+}
+
+function hasSafeMultiTargetFilter(target: CommandTarget) {
+  if (target.mode === 'selected' || target.mode === 'last') {
+    return true
+  }
+
+  return Boolean(
+    target.id ||
+      target.shape ||
+      target.position ||
+      target.color ||
+      target.groupId ||
+      target.groupLabel ||
+      target.partLabel,
+  )
+}
+
+function getTargetUnitKey(
+  object: CommandPlannerInput['canvas']['objects'][number],
+  target: CommandTarget,
+) {
+  if (target.mode !== 'semantic') {
+    return object.id
+  }
+
+  const groupKey = getSemanticGroupKey(object)
+  const partKey = target.partLabel ? object.partLabel ?? object.id : ''
+
+  return `${groupKey}:${partKey}`
+}
+
+function getTargetUnitCount(
+  objects: CommandPlannerInput['canvas']['objects'],
+  target: CommandTarget,
+) {
+  return new Set(objects.map((object) => getTargetUnitKey(object, target))).size
 }
 
 function matchesTargetObject(
@@ -702,18 +792,59 @@ function matchesTargetObject(
   return true
 }
 
+function shouldPreferPrimitiveObjectMatches(target: CommandTarget) {
+  return (
+    target.mode === 'shape' &&
+    Boolean(target.shape) &&
+    !target.id &&
+    !target.groupId &&
+    !target.groupLabel &&
+    !target.partLabel
+  )
+}
+
+function getTargetObjectMatches(
+  canvas: CommandPlannerInput['canvas'],
+  target: CommandTarget,
+) {
+  const matches = canvas.objects.filter((object) =>
+    matchesTargetObject(object, target, canvas),
+  )
+
+  if (!shouldPreferPrimitiveObjectMatches(target)) {
+    return matches
+  }
+
+  const primitiveMatches = matches.filter(
+    (object) => !object.groupId && !object.groupLabel && !object.partLabel,
+  )
+
+  return primitiveMatches.length > 0 ? primitiveMatches : matches
+}
+
 function getTargetMatchSummary(
   target: CommandTarget,
   canvas: CommandPlannerInput['canvas'],
 ) {
   if (target.mode === 'selected') {
-    const selectedObject = canvas.objects.find((object) => object.id === canvas.selectedId)
-    const matchCount =
-      selectedObject && matchesTargetObject(selectedObject, target, canvas) ? 1 : 0
+    const selectedObjects =
+      canvas.selectedGroupId && canExpandValidationSemanticReference(target)
+        ? canvas.objects.filter(
+            (object) =>
+              object.groupId === canvas.selectedGroupId &&
+              matchesTargetObject(object, target, canvas),
+          )
+        : canvas.objects.filter(
+            (object) =>
+              object.id === canvas.selectedId &&
+              matchesTargetObject(object, target, canvas),
+          )
+    const matchCount = selectedObjects.length
 
     return {
       matchCount,
-      semanticGroupCount: matchCount,
+      semanticGroupCount: canvas.selectedGroupId && matchCount > 0 ? 1 : matchCount,
+      unitCount: getTargetUnitCount(selectedObjects, target),
     }
   }
 
@@ -723,15 +854,14 @@ function getTargetMatchSummary(
     return {
       matchCount,
       semanticGroupCount: matchCount,
+      unitCount: matchCount,
     }
   }
 
-  const matches = canvas.objects.filter((object) =>
-    matchesTargetObject(object, target, canvas),
-  )
+  const matches = getTargetObjectMatches(canvas, target)
 
   if (target.mode === 'semantic') {
-    if (!target.groupId && canvas.selectedGroupId) {
+    if (!targetRequestsMultiple(target) && !target.groupId && canvas.selectedGroupId) {
       const selectedGroupMatches = matches.filter(
         (object) => object.groupId === canvas.selectedGroupId,
       )
@@ -740,6 +870,7 @@ function getTargetMatchSummary(
         return {
           matchCount: selectedGroupMatches.length,
           semanticGroupCount: 1,
+          unitCount: 1,
         }
       }
     }
@@ -747,6 +878,7 @@ function getTargetMatchSummary(
     return {
       matchCount: matches.length,
       semanticGroupCount: new Set(matches.map(getSemanticGroupKey)).size,
+      unitCount: getTargetUnitCount(matches, target),
     }
   }
 
@@ -754,12 +886,14 @@ function getTargetMatchSummary(
     return {
       matchCount: matches.length,
       semanticGroupCount: matches.length,
+      unitCount: matches.length,
     }
   }
 
   return {
     matchCount: 0,
     semanticGroupCount: 0,
+    unitCount: 0,
   }
 }
 
@@ -779,7 +913,15 @@ function validateTargetSelection(
     } satisfies CommandPlannerResult
   }
 
-  const { matchCount, semanticGroupCount } = getTargetMatchSummary(
+  if (targetRequestsMultiple(normalizedTarget) && !hasSafeMultiTargetFilter(normalizedTarget)) {
+    return {
+      status: 'invalid',
+      reason: 'unsafe-bulk-target',
+      rawValue,
+    } satisfies CommandPlannerResult
+  }
+
+  const { matchCount, semanticGroupCount, unitCount } = getTargetMatchSummary(
     normalizedTarget,
     options.canvas,
   )
@@ -790,6 +932,22 @@ function validateTargetSelection(
       reason: 'target-not-found',
       rawValue,
     } satisfies CommandPlannerResult
+  }
+
+  if (normalizedTarget.count !== undefined && unitCount !== normalizedTarget.count) {
+    if (!options.strictTargets) {
+      return null
+    }
+
+    return {
+      status: 'invalid',
+      reason: 'target-count-mismatch',
+      rawValue,
+    } satisfies CommandPlannerResult
+  }
+
+  if (targetRequestsMultiple(normalizedTarget)) {
+    return null
   }
 
   if (normalizedTarget.mode === 'semantic' && semanticGroupCount !== 1) {
@@ -1045,15 +1203,15 @@ function selectValidationObjects(
     return latestMatch ? [latestMatch] : []
   }
 
-  const matches = canvas.objects.filter((object) =>
-    matchesTargetObject(object, normalizedTarget, canvas),
-  )
+  const matches = getTargetObjectMatches(canvas, normalizedTarget)
 
   if (normalizedTarget.mode !== 'semantic') {
-    return matches.length === 1 ? matches : []
+    return targetRequestsMultiple(normalizedTarget) || matches.length === 1
+      ? matches
+      : []
   }
 
-  if (!normalizedTarget.groupId && canvas.selectedGroupId) {
+  if (!targetRequestsMultiple(normalizedTarget) && !normalizedTarget.groupId && canvas.selectedGroupId) {
     const selectedGroupMatches = matches.filter(
       (object) => object.groupId === canvas.selectedGroupId,
     )
@@ -1065,7 +1223,9 @@ function selectValidationObjects(
 
   const semanticKeys = new Set(matches.map(getSemanticGroupKey))
 
-  return semanticKeys.size === 1 ? matches : []
+  return targetRequestsMultiple(normalizedTarget) || semanticKeys.size === 1
+    ? matches
+    : []
 }
 
 function getValidationBounds(objects: CommandPlannerInput['canvas']['objects']) {
@@ -1116,6 +1276,46 @@ function updateValidationObjects(
       targetIds.has(object.id) ? updateObject(object) : object,
     ),
   })
+}
+
+function replaceValidationObjects(
+  canvas: CommandPlannerInput['canvas'],
+  updatedObjects: CommandPlannerInput['canvas']['objects'],
+) {
+  if (updatedObjects.length === 0) {
+    return canvas
+  }
+
+  const updatedObjectById = new Map(
+    updatedObjects.map((object) => [object.id, object]),
+  )
+  const selectedId = updatedObjects.at(-1)?.id
+  const selectedGroupId =
+    updatedObjects.length > 1 ? getValidationSharedGroupId(updatedObjects) : undefined
+
+  return recomputeValidationCanvas({
+    ...canvas,
+    selectedId,
+    selectedGroupId,
+    objects: canvas.objects.map((object) => updatedObjectById.get(object.id) ?? object),
+  })
+}
+
+function groupValidationTargetUnits(
+  objects: CommandPlannerInput['canvas']['objects'],
+  target: CommandTarget,
+) {
+  const groups = new Map<string, CommandPlannerInput['canvas']['objects']>()
+
+  for (const object of objects) {
+    const key = getTargetUnitKey(object, target)
+    const groupObjects = groups.get(key) ?? []
+
+    groupObjects.push(object)
+    groups.set(key, groupObjects)
+  }
+
+  return Array.from(groups.values())
 }
 
 function getValidationSpatialDelta(
@@ -1230,6 +1430,119 @@ function applyValidationMoveCommand(
   }))
 }
 
+function applyValidationAlignCommand(
+  canvas: CommandPlannerInput['canvas'],
+  command: Extract<BatchStepCommand, { action: 'align' }>,
+) {
+  const targetObjects = selectValidationObjects(canvas, command.target)
+
+  if (targetObjects.length === 0) {
+    return canvas
+  }
+
+  const units = groupValidationTargetUnits(targetObjects, command.target)
+
+  if (units.length < 2) {
+    return canvas
+  }
+
+  const anchorBounds = getValidationBounds(targetObjects)
+  const updatedObjects = units.flatMap((unit) => {
+    const bounds = getValidationBounds(unit)
+    const delta =
+      command.axis === 'left'
+        ? { x: anchorBounds.x - bounds.x, y: 0 }
+        : command.axis === 'right'
+          ? { x: anchorBounds.x + anchorBounds.width - bounds.x - bounds.width, y: 0 }
+          : command.axis === 'center'
+            ? { x: anchorBounds.x + anchorBounds.width / 2 - bounds.x - bounds.width / 2, y: 0 }
+            : command.axis === 'top'
+              ? { x: 0, y: anchorBounds.y - bounds.y }
+              : command.axis === 'bottom'
+                ? { x: 0, y: anchorBounds.y + anchorBounds.height - bounds.y - bounds.height }
+                : { x: 0, y: anchorBounds.y + anchorBounds.height / 2 - bounds.y - bounds.height / 2 }
+
+    return unit.map((object) => ({
+      ...object,
+      x: Math.round(object.x + delta.x),
+      y: Math.round(object.y + delta.y),
+    }))
+  })
+
+  return replaceValidationObjects(canvas, updatedObjects)
+}
+
+function applyValidationArrangeCommand(
+  canvas: CommandPlannerInput['canvas'],
+  command: Extract<BatchStepCommand, { action: 'arrange' }>,
+) {
+  const targetObjects = selectValidationObjects(canvas, command.target)
+
+  if (targetObjects.length === 0) {
+    return canvas
+  }
+
+  const units = groupValidationTargetUnits(targetObjects, command.target)
+
+  if (units.length < 2) {
+    return canvas
+  }
+
+  const spacing = Math.max(0, Math.min(Math.round(command.spacing ?? 32), 240))
+  const anchorBounds = getValidationBounds(targetObjects)
+  const centerX = anchorBounds.x + anchorBounds.width / 2
+  const centerY = anchorBounds.y + anchorBounds.height / 2
+  const orderedUnits = [...units].sort((left, right) => {
+    const leftBounds = getValidationBounds(left)
+    const rightBounds = getValidationBounds(right)
+
+    return command.layout === 'row'
+      ? leftBounds.x - rightBounds.x || leftBounds.y - rightBounds.y
+      : leftBounds.y - rightBounds.y || leftBounds.x - rightBounds.x
+  })
+  const unitBounds = orderedUnits.map((unit) => getValidationBounds(unit))
+  const totalWidth =
+    unitBounds.reduce((sum, bounds) => sum + bounds.width, 0) +
+    spacing * Math.max(0, unitBounds.length - 1)
+  const totalHeight =
+    unitBounds.reduce((sum, bounds) => sum + bounds.height, 0) +
+    spacing * Math.max(0, unitBounds.length - 1)
+  let cursorX = Math.round(centerX - totalWidth / 2)
+  let cursorY = Math.round(centerY - totalHeight / 2)
+
+  const updatedObjects = orderedUnits.flatMap((unit, index) => {
+    const bounds = unitBounds[index]
+
+    if (command.layout === 'row') {
+      const delta = {
+        x: cursorX - bounds.x,
+        y: Math.round(centerY - bounds.height / 2 - bounds.y),
+      }
+
+      cursorX += bounds.width + spacing
+      return unit.map((object) => ({
+        ...object,
+        x: object.x + delta.x,
+        y: object.y + delta.y,
+      }))
+    }
+
+    const delta = {
+      x: Math.round(centerX - bounds.width / 2 - bounds.x),
+      y: cursorY - bounds.y,
+    }
+
+    cursorY += bounds.height + spacing
+    return unit.map((object) => ({
+      ...object,
+      x: object.x + delta.x,
+      y: object.y + delta.y,
+    }))
+  })
+
+  return replaceValidationObjects(canvas, updatedObjects)
+}
+
 function applyValidationResizeCanvasCommand(
   canvas: CommandPlannerInput['canvas'],
   command: Extract<BatchStepCommand, { action: 'resizeCanvas' }>,
@@ -1340,6 +1653,14 @@ function applyValidationBatchStep(
         y: Math.round(centerY + (objectCenterY - centerY) * scale - height / 2),
       }
     })
+  }
+
+  if (command.action === 'align') {
+    return applyValidationAlignCommand(canvas, command)
+  }
+
+  if (command.action === 'arrange') {
+    return applyValidationArrangeCommand(canvas, command)
   }
 
   if (command.action === 'delete') {
@@ -2060,6 +2381,96 @@ export function validatePlannedCommand(
         action: 'resize',
         target: normalizeEditableTarget(target, options),
         direction: rawValue.direction as 'larger' | 'smaller',
+        sourceText,
+      },
+      correction,
+    )
+  }
+
+  if (rawValue.action === 'align') {
+    const target = normalizeTarget(rawValue.target)
+
+    if (!target || !allowedAlignAxes.has(rawValue.axis as AlignAxis)) {
+      return {
+        status: 'invalid',
+        reason: 'invalid-align-command',
+        rawValue,
+      }
+    }
+
+    const targetError = validateTargetSelection(target, rawValue, options, {
+      allowGroup: true,
+    })
+
+    if (targetError) {
+      return targetError
+    }
+
+    const normalizedTarget = normalizeEditableTarget(target, options)
+
+    if (!targetRequestsMultiple(normalizedTarget)) {
+      return {
+        status: 'invalid',
+        reason: 'align-requires-multiple-targets',
+        rawValue,
+      }
+    }
+
+    return createPlannedResult(
+      {
+        action: 'align',
+        target: normalizedTarget,
+        axis: rawValue.axis as AlignAxis,
+        sourceText,
+      },
+      correction,
+    )
+  }
+
+  if (rawValue.action === 'arrange') {
+    const target = normalizeTarget(rawValue.target)
+    const spacing = normalizeArrangeSpacing(rawValue.spacing)
+
+    if (!target || !allowedArrangeLayouts.has(rawValue.layout as ArrangeLayout)) {
+      return {
+        status: 'invalid',
+        reason: 'invalid-arrange-command',
+        rawValue,
+      }
+    }
+
+    if (spacing === null) {
+      return {
+        status: 'invalid',
+        reason: 'invalid-arrange-spacing',
+        rawValue,
+      }
+    }
+
+    const targetError = validateTargetSelection(target, rawValue, options, {
+      allowGroup: true,
+    })
+
+    if (targetError) {
+      return targetError
+    }
+
+    const normalizedTarget = normalizeEditableTarget(target, options)
+
+    if (!targetRequestsMultiple(normalizedTarget)) {
+      return {
+        status: 'invalid',
+        reason: 'arrange-requires-multiple-targets',
+        rawValue,
+      }
+    }
+
+    return createPlannedResult(
+      {
+        action: 'arrange',
+        target: normalizedTarget,
+        layout: rawValue.layout as ArrangeLayout,
+        spacing,
         sourceText,
       },
       correction,

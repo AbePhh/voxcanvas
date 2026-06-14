@@ -1,4 +1,5 @@
 import { validatePlannedCommand } from './commandValidator'
+import { createAlignmentFallbackCommand } from './alignmentFallback'
 import type { CommandPlanner, CommandPlannerResult } from './types'
 import { getNormalizationDecision } from './normalizationPolicy'
 import type { ParsedCommand } from '../commands/types'
@@ -7,6 +8,18 @@ type PlannerApiResponse = {
   rawCommand?: unknown
   error?: string
   message?: string
+}
+
+function validateAlignmentFallback(input: Parameters<CommandPlanner>[0]) {
+  const fallbackCommand = createAlignmentFallbackCommand(input.sourceText)
+
+  return fallbackCommand
+    ? validatePlannedCommand(fallbackCommand, {
+        canvas: input.canvas,
+        sourceText: input.sourceText,
+        localCommand: input.localCommand,
+      })
+    : null
 }
 
 export const aiPlanner: CommandPlanner = async (input): Promise<CommandPlannerResult> => {
@@ -29,11 +42,25 @@ export const aiPlanner: CommandPlanner = async (input): Promise<CommandPlannerRe
       }
     }
 
-    return validatePlannedCommand(body.rawCommand, {
+    const plannedResult = validatePlannedCommand(body.rawCommand, {
       canvas: input.canvas,
       sourceText: input.sourceText,
       localCommand: input.localCommand,
     })
+
+    if (
+      plannedResult.status === 'invalid' &&
+      (plannedResult.reason === 'unsupported-action' ||
+        plannedResult.reason === 'command-must-be-an-object-with-action')
+    ) {
+      const fallbackResult = validateAlignmentFallback(input)
+
+      if (fallbackResult) {
+        return fallbackResult
+      }
+    }
+
+    return plannedResult
   } catch (error) {
     return {
       status: 'invalid',

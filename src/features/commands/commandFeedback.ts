@@ -1,4 +1,10 @@
-import { colorLabels, positionLabels, shapeLabels } from './commandLabels'
+import {
+  alignAxisLabels,
+  arrangeLayoutLabels,
+  colorLabels,
+  positionLabels,
+  shapeLabels,
+} from './commandLabels'
 import type { CommandTarget, ParsedCommand, SpatialMoveRelation } from './types'
 import type { CommandCorrectionSummary } from '../planner/types'
 
@@ -141,6 +147,30 @@ function describeCommand(command: ParsedCommand) {
       details: [
         `目标：${target}`,
         `方向：${command.direction === 'larger' ? '放大' : '缩小'}`,
+      ],
+    }
+  }
+
+  if (command.action === 'align') {
+    const target = describeTarget(command.target)
+
+    return {
+      title: '对齐对象',
+      summary: `将${target}${alignAxisLabels[command.axis]}。`,
+      details: [`目标：${target}`, `方式：${alignAxisLabels[command.axis]}`],
+    }
+  }
+
+  if (command.action === 'arrange') {
+    const target = describeTarget(command.target)
+
+    return {
+      title: '排列对象',
+      summary: `将${target}${arrangeLayoutLabels[command.layout]}。`,
+      details: [
+        `目标：${target}`,
+        `方式：${arrangeLayoutLabels[command.layout]}`,
+        `间距：${command.spacing ?? 32}px`,
       ],
     }
   }
