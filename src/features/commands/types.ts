@@ -12,6 +12,7 @@ export type CommandAction =
   | 'export'
   | 'resizeCanvas'
   | 'scene'
+  | 'addSceneObject'
   | 'unknown'
 
 export type CommandColor =
@@ -153,6 +154,31 @@ export type SceneCommand = {
   elements: SceneElement[]
 }
 
+export type SceneRelation =
+  | 'left-of'
+  | 'right-of'
+  | 'above'
+  | 'below'
+  | 'near'
+  | 'inside'
+  | 'around'
+
+export type SceneObjectAnchor = {
+  groupId?: string
+  groupLabel?: string
+  partLabel?: string
+  relation?: SceneRelation
+}
+
+export type AddSceneObjectCommand = {
+  action: 'addSceneObject'
+  title?: string
+  objectLabel?: string
+  anchor?: SceneObjectAnchor
+  sourceText: string
+  elements: SceneElement[]
+}
+
 export type SimpleCanvasCommand =
   | {
       action: 'undo' | 'redo' | 'clear'
@@ -165,6 +191,7 @@ export type SimpleCanvasCommand =
     }
   | ResizeCanvasCommand
   | SceneCommand
+  | AddSceneObjectCommand
   | CreateShapeCommand
   | MoveShapeCommand
   | RecolorShapeCommand

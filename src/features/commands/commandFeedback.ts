@@ -165,6 +165,19 @@ function describeCommand(command: ParsedCommand) {
     }
   }
 
+  if (command.action === 'addSceneObject') {
+    return {
+      title: '新增内容',
+      summary: `新增${command.objectLabel ?? command.title ?? '内容'}，包含 ${
+        command.elements.length
+      } 个基础图形。`,
+      details: [
+        `内容：${command.objectLabel ?? command.title ?? '未命名'}`,
+        `元素数量：${command.elements.length}`,
+      ],
+    }
+  }
+
   if (command.action === 'export') {
     return {
       title: '导出作品',

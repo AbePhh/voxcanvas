@@ -1,4 +1,4 @@
-import type { SceneCommand, SceneElement } from '../commands/types'
+import type { AddSceneObjectCommand, SceneCommand, SceneElement } from '../commands/types'
 import { colorStyles } from './colorStyles'
 import type { CanvasState, ShapeObject } from './types'
 
@@ -192,7 +192,7 @@ export function normalizeSceneElements(
 }
 
 export function createShapesFromSceneCommand(
-  command: SceneCommand,
+  command: SceneCommand | AddSceneObjectCommand,
   canvas: Pick<CanvasState, 'width' | 'height' | 'shapes'>,
 ): ShapeObject[] {
   const sceneSpace = getSceneSpace(canvas)

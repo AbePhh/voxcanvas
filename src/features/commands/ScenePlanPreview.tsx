@@ -1,10 +1,10 @@
-import type { SceneCommand } from './types'
+import type { AddSceneObjectCommand, SceneCommand } from './types'
 import { createScenePlanSummary } from './scenePlan'
 import type { ScenePlanSummary } from './scenePlan'
 import './ScenePlanPreview.css'
 
 type ScenePlanPreviewProps = {
-  command?: SceneCommand
+  command?: SceneCommand | AddSceneObjectCommand
   summary?: ScenePlanSummary
   showSteps?: boolean
 }

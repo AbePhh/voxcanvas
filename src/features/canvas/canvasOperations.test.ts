@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  applyAddSceneObjectCommand,
   applyClearCommand,
   applyCreateCommand,
   applyDeleteCommand,
@@ -579,6 +580,72 @@ describe('canvasOperations', () => {
       'tree-2',
     ])
     expect(secondScene.selectedGroupId).toBe('tree-2')
+  })
+
+  it('adds semantic scene objects without rebuilding existing scene groups', () => {
+    const scene = applySceneCommand(baseCanvas, {
+      action: 'scene',
+      title: '房子',
+      sourceText: '画一间房子',
+      elements: [
+        {
+          id: 'house-wall',
+          groupId: 'house-1',
+          groupLabel: '房子',
+          partLabel: '墙体',
+          shape: 'rect',
+          color: 'orange',
+          bbox: { x: 380, y: 330, width: 240, height: 160 },
+        },
+        {
+          id: 'house-roof',
+          groupId: 'house-1',
+          groupLabel: '房子',
+          partLabel: '屋顶',
+          shape: 'triangle',
+          color: 'red',
+          bbox: { x: 340, y: 220, width: 320, height: 140 },
+        },
+      ],
+    })
+    const added = applyAddSceneObjectCommand(scene, {
+      action: 'addSceneObject',
+      title: '新增树',
+      objectLabel: '树',
+      anchor: {
+        groupLabel: '房子',
+        relation: 'right-of',
+      },
+      sourceText: '在房子的右边再生成一棵树',
+      elements: [
+        {
+          id: 'tree-trunk',
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树干',
+          shape: 'rect',
+          color: 'orange',
+          bbox: { x: 720, y: 360, width: 48, height: 120 },
+        },
+        {
+          id: 'tree-crown',
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树冠',
+          shape: 'circle',
+          color: 'green',
+          bbox: { x: 665, y: 250, width: 158, height: 158 },
+        },
+      ],
+    })
+
+    expect(added.shapes).toHaveLength(scene.shapes.length + 2)
+    expect(added.shapes.slice(0, scene.shapes.length)).toEqual(scene.shapes)
+    expect(added.shapes.slice(-2).map((shape) => shape.groupLabel)).toEqual([
+      '树',
+      '树',
+    ])
+    expect(added.selectedGroupId).toBe('tree-1')
   })
 
   it('lets selected or last scene objects resolve to the whole newly added group', () => {

@@ -29,7 +29,11 @@ export const aiPlanner: CommandPlanner = async (input): Promise<CommandPlannerRe
       }
     }
 
-    return validatePlannedCommand(body.rawCommand, { canvas: input.canvas })
+    return validatePlannedCommand(body.rawCommand, {
+      canvas: input.canvas,
+      sourceText: input.sourceText,
+      localCommand: input.localCommand,
+    })
   } catch (error) {
     return {
       status: 'invalid',

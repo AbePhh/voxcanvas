@@ -14,6 +14,16 @@ const defaultContext: CommandExecutionFeedbackContext = {
   source: 'local',
 }
 
+const relationLabels = {
+  'left-of': '在左侧',
+  'right-of': '在右侧',
+  above: '在上方',
+  below: '在下方',
+  near: '在附近',
+  inside: '在内部',
+  around: '在周围',
+} as const
+
 function formatPixels(value: number) {
   return `${Math.round(value)}px`
 }
@@ -309,6 +319,51 @@ function createSceneFeedback(
   })
 }
 
+function createAddSceneObjectFeedback(
+  command: Extract<ParsedCommand, { action: 'addSceneObject' }>,
+  before: CanvasState,
+  after: CanvasState,
+  context: CommandExecutionFeedbackContext,
+) {
+  const addedShapes = getAddedShapes(before, after)
+  const bounds = getBounds(addedShapes)
+
+  if (!bounds) {
+    return createNoChangeFeedback(command, context)
+  }
+
+  const groupLabels = Array.from(
+    new Set(addedShapes.flatMap((shape) => (shape.groupLabel ? [shape.groupLabel] : []))),
+  )
+  const contentLabel = command.objectLabel ?? command.title ?? groupLabels[0] ?? '内容'
+  const anchorText = command.anchor?.groupLabel
+    ? `，参考${command.anchor.groupLabel}${
+        command.anchor.relation ? `（${relationLabels[command.anchor.relation]}）` : ''
+      }`
+    : ''
+
+  return createFeedback(
+    'executed',
+    '新增内容完成',
+    `已新增${contentLabel}，追加 ${addedShapes.length} 个基础图形${anchorText}。`,
+    {
+      ...context,
+      metrics: [
+        { label: '新增内容', value: contentLabel },
+        { label: '新增图形', value: `${addedShapes.length} 个` },
+        { label: '覆盖区域', value: formatSize(bounds) },
+        { label: '位置', value: getCanvasPositionLabel(bounds, after) },
+      ],
+      details: [
+        groupLabels.length > 0
+          ? `语义对象：${groupLabels.slice(0, 6).join('、')}`
+          : '语义对象：未提供',
+        `边界：x ${formatPixels(bounds.x)}，y ${formatPixels(bounds.y)}，${formatSize(bounds)}`,
+      ],
+    },
+  )
+}
+
 function createMoveFeedback(
   command: Extract<ParsedCommand, { action: 'move' }>,
   before: CanvasState,
@@ -527,6 +582,10 @@ export function createPreciseExecutionFeedback(
 
   if (command.action === 'scene') {
     return createSceneFeedback(command, before, after, context)
+  }
+
+  if (command.action === 'addSceneObject') {
+    return createAddSceneObjectFeedback(command, before, after, context)
   }
 
   if (command.action === 'move') {

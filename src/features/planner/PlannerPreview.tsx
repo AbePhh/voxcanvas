@@ -32,10 +32,19 @@ export function PlannerPreview({
   const plannedCommand =
     previewResult.status === 'planned' ? previewResult.command : null
   const plannedScene = plannedCommand?.action === 'scene' ? plannedCommand : null
+  const plannedAddition =
+    plannedCommand?.action === 'addSceneObject' ? plannedCommand : null
+  const plannedSceneLike = plannedScene ?? plannedAddition
 
   return (
     <div className="planner-preview" aria-live="polite">
-      <h3>{plannedScene ? 'Scene Plan' : 'Planner Fallback'}</h3>
+      <h3>
+        {plannedAddition
+          ? 'Addition Plan'
+          : plannedScene
+            ? 'Scene Plan'
+            : 'Planner Fallback'}
+      </h3>
       {isPlanning ? <p>AI planner is interpreting this command...</p> : null}
       {!isPlanning && previewResult.status === 'needs-ai' ? (
         <p>
@@ -45,8 +54,9 @@ export function PlannerPreview({
       ) : null}
       {!isPlanning && previewResult.status === 'planned' ? (
         <p>
-          AI planner returned a valid {plannedScene ? 'scene plan' : 'command'} and
-          it was executed.
+          AI planner returned a valid{' '}
+          {plannedAddition ? 'content addition' : plannedScene ? 'scene plan' : 'command'}{' '}
+          and it was executed.
         </p>
       ) : null}
       {!isPlanning && previewResult.status === 'planned' && previewResult.correction ? (
@@ -74,7 +84,7 @@ export function PlannerPreview({
       {!isPlanning && previewResult.status === 'invalid' ? (
         <p>AI planner returned an invalid command: {previewResult.reason}</p>
       ) : null}
-      {plannedScene ? <ScenePlanPreview command={plannedScene} showSteps /> : null}
+      {plannedSceneLike ? <ScenePlanPreview command={plannedSceneLike} showSteps /> : null}
       {previewResult.status === 'planned' &&
       previewResult.command.action === 'create' &&
       localCommand?.action === 'unknown' ? (
