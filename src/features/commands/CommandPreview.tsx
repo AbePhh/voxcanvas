@@ -11,6 +11,10 @@ function formatCommand(command: ParsedCommand) {
     return `Unknown: ${command.reason}`
   }
 
+  if (command.action === 'batch') {
+    return `Run ${command.commands.length} commands in sequence`
+  }
+
   if (command.action === 'create') {
     return [
       `Create ${command.shape}`,
@@ -82,6 +86,13 @@ export function CommandPreview({ command }: CommandPreviewProps) {
           </p>
           {command.action === 'scene' || command.action === 'addSceneObject' ? (
             <ScenePlanPreview command={command} />
+          ) : null}
+          {command.action === 'batch' ? (
+            <ol className="command-preview__steps">
+              {command.commands.map((step, index) => (
+                <li key={`${step.action}-${index}`}>{formatCommand(step)}</li>
+              ))}
+            </ol>
           ) : null}
           <pre>{JSON.stringify(command, null, 2)}</pre>
         </>

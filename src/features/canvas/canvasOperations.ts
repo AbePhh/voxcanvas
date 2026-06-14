@@ -1,5 +1,7 @@
 import type {
   AddSceneObjectCommand,
+  BatchCommand,
+  BatchStepCommand,
   CanvasResizeAnchor,
   CommandTarget,
   CreateShapeCommand,
@@ -525,6 +527,67 @@ export function applyResizeCommand(
   return updateTargetShapes(state, command.target, (shape) =>
     resizedShapeById.get(shape.id) ?? shape,
   )
+}
+
+function applyBatchStepCommand(
+  state: CanvasState,
+  command: BatchStepCommand,
+): CanvasState {
+  let nextState: CanvasState
+
+  switch (command.action) {
+    case 'create':
+      nextState = applyCreateCommand(state, command)
+      break
+    case 'delete':
+      nextState = applyDeleteCommand(state, command)
+      break
+    case 'move':
+      nextState = applyMoveCommand(state, command)
+      break
+    case 'recolor':
+      nextState = applyRecolorCommand(state, command)
+      break
+    case 'resize':
+      nextState = applyResizeCommand(state, command)
+      break
+    case 'resizeCanvas':
+      nextState = applyResizeCanvasCommand(state, command)
+      break
+    default:
+      nextState = state
+  }
+
+  if (nextState === state) {
+    return state
+  }
+
+  return {
+    ...nextState,
+    future: state.future,
+    history: state.history,
+  }
+}
+
+export function applyBatchCommand(
+  state: CanvasState,
+  command: BatchCommand,
+): CanvasState {
+  const initialSnapshot = takeSnapshot(state)
+  const nextState = command.commands.reduce(
+    (currentState, step) => applyBatchStepCommand(currentState, step),
+    state,
+  )
+
+  if (nextState === state) {
+    return state
+  }
+
+  return {
+    ...nextState,
+    future: [],
+    history: [...state.history, initialSnapshot],
+  }
 }
 
 export function applyResizeCanvasCommand(

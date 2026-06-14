@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   applyAddSceneObjectCommand,
+  applyBatchCommand,
   applyClearCommand,
   applyCreateCommand,
   applyDeleteCommand,
@@ -1319,5 +1320,113 @@ describe('canvasOperations', () => {
       expect(shape.x + shape.width).toBeLessThanOrEqual(baseCanvas.width - 24)
     })
     expect(resized.history).toHaveLength(1)
+  })
+
+  it('executes multi-step edit commands in order as one undoable operation', () => {
+    const scene = applySceneCommand(baseCanvas, {
+      action: 'scene',
+      title: '房子',
+      sourceText: '画一间房子',
+      elements: [
+        {
+          id: 'house-wall',
+          groupId: 'house-1',
+          groupLabel: '房子',
+          partLabel: '墙体',
+          shape: 'rect',
+          color: 'orange',
+          bbox: { x: 340, y: 320, width: 240, height: 160 },
+        },
+        {
+          id: 'house-roof',
+          groupId: 'house-1',
+          groupLabel: '房子',
+          partLabel: '屋顶',
+          shape: 'triangle',
+          color: 'red',
+          bbox: { x: 300, y: 220, width: 320, height: 140 },
+        },
+      ],
+    })
+    const edited = applyBatchCommand(scene, {
+      action: 'batch',
+      sourceText: '把房子往右边移动一点，屋顶变成黑色',
+      commands: [
+        {
+          action: 'move',
+          target: { mode: 'semantic', groupLabel: '房子' },
+          mode: 'relative',
+          direction: 'right',
+          distance: 48,
+          sourceText: '把房子往右边移动一点',
+        },
+        {
+          action: 'recolor',
+          target: { mode: 'semantic', groupLabel: '房子', partLabel: '屋顶' },
+          color: 'black',
+          sourceText: '屋顶变成黑色',
+        },
+      ],
+    })
+
+    expect(edited.shapes.map((shape) => shape.x)).toEqual(
+      scene.shapes.map((shape) => shape.x + 48),
+    )
+    expect(edited.shapes.find((shape) => shape.partLabel === '屋顶')).toMatchObject({
+      fill: '#111827',
+      stroke: '#020617',
+    })
+    expect(edited.history).toHaveLength(scene.history.length + 1)
+
+    const undone = applyUndoCommand(edited)
+
+    expect(undone.shapes).toEqual(scene.shapes)
+    expect(undone.future).toHaveLength(1)
+  })
+
+  it('executes three-step batch commands in order as one undoable operation', () => {
+    const edited = applyBatchCommand(baseCanvas, {
+      action: 'batch',
+      sourceText: '画一个红色圆形，然后把它移动到右上角，再把它改成蓝色',
+      commands: [
+        {
+          action: 'create',
+          shape: 'circle',
+          color: 'red',
+          position: 'center',
+          size: 'medium',
+          sourceText: '画一个红色圆形',
+        },
+        {
+          action: 'move',
+          target: { mode: 'selected' },
+          mode: 'absolute',
+          position: 'top-right',
+          sourceText: '把它移动到右上角',
+        },
+        {
+          action: 'recolor',
+          target: { mode: 'selected' },
+          color: 'blue',
+          sourceText: '再把它改成蓝色',
+        },
+      ],
+    })
+    const addedCircle = edited.shapes.at(-1)
+
+    expect(edited.shapes).toHaveLength(baseCanvas.shapes.length + 1)
+    expect(addedCircle).toMatchObject({
+      type: 'circle',
+      fill: '#3b82f6',
+      stroke: '#1e40af',
+      x: 712,
+      y: 67,
+    })
+    expect(edited.history).toHaveLength(baseCanvas.history.length + 1)
+
+    const undone = applyUndoCommand(edited)
+
+    expect(undone.shapes).toEqual(baseCanvas.shapes)
+    expect(undone.future).toHaveLength(1)
   })
 })

@@ -13,6 +13,7 @@ export type CommandAction =
   | 'resizeCanvas'
   | 'scene'
   | 'addSceneObject'
+  | 'batch'
   | 'unknown'
 
 export type CommandColor =
@@ -199,6 +200,20 @@ export type AddSceneObjectCommand = {
   elements: SceneElement[]
 }
 
+export type BatchStepCommand =
+  | ResizeCanvasCommand
+  | CreateShapeCommand
+  | MoveShapeCommand
+  | RecolorShapeCommand
+  | ResizeShapeCommand
+  | DeleteShapeCommand
+
+export type BatchCommand = {
+  action: 'batch'
+  sourceText: string
+  commands: BatchStepCommand[]
+}
+
 export type SimpleCanvasCommand =
   | {
       action: 'undo' | 'redo' | 'clear'
@@ -217,6 +232,7 @@ export type SimpleCanvasCommand =
   | RecolorShapeCommand
   | ResizeShapeCommand
   | DeleteShapeCommand
+  | BatchCommand
 
 export type UnknownCommand = {
   action: 'unknown'

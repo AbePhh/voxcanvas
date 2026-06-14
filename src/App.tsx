@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useState } from 'react'
 import './App.css'
 import {
   applyAddSceneObjectCommand,
+  applyBatchCommand,
   applyClearCommand,
   applyCreateCommand,
   applyDeleteCommand,
@@ -119,6 +120,9 @@ function App() {
           break
         case 'addSceneObject':
           nextState = applyAddSceneObjectCommand(current, command)
+          break
+        case 'batch':
+          nextState = applyBatchCommand(current, command)
           break
         case 'clear':
           nextState = applyClearCommand(current)
