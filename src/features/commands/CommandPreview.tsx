@@ -21,6 +21,10 @@ function formatCommand(command: ParsedCommand) {
   }
 
   if (command.action === 'move') {
+    if (command.mode === 'spatial') {
+      return `Move ${command.target.mode} target ${command.relation} ${command.reference.mode} reference`
+    }
+
     return command.mode === 'relative'
       ? `Move ${command.target.mode} target ${command.direction}`
       : `Move ${command.target.mode} target to ${command.position}`

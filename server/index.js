@@ -84,7 +84,7 @@ const explicitPrimitiveShapePattern =
   /圆形|圆圈|圆|矩形|长方形|正方形|方块|三角形|三角|线条|直线|文本|文字|文本框/
 const createIntentPattern = /画|绘制|创建|添加|生成|新增|加|放|插入/
 const incrementalAdditionPattern =
-  /再|再来|添加|新增|加一|加个|加一个|放一|放个|放一个|插入|右边|左边|旁边|附近|上面|下面|周围/
+  /再|再来|添加|新增|插入|创建|生成|加上|加一|加个|加一个|加只|加棵|加朵|加辆|加座|加条|加片|加颗|加块|加束|加艘|加台|放一|放个|放一个|放只|放棵|放朵|放辆|放座|放条|放片|放颗|放块|放束|放艘|放台/
 const wholeSceneResetPattern = /重新|重画|整个|完整|从头|新场景|全新场景/
 
 function normalizeIntentText(text) {
@@ -183,6 +183,7 @@ function buildPlannerPrompt(input) {
     '- create: { action, shape, color?, position?, size, text?, sourceText }',
     '- move absolute: { action, target, mode: "absolute", position, sourceText }',
     '- move relative: { action, target, mode: "relative", direction, distance, sourceText }',
+    '- move spatial: { action, target, mode: "spatial", reference, relation, align?, gap?, sourceText }',
     '- recolor: { action, target, color, sourceText }',
     '- resize: { action, target, direction, sourceText }',
     '- delete: { action, target, sourceText }',
@@ -208,6 +209,8 @@ function buildPlannerPrompt(input) {
     'Allowed canvas resize anchors: center, left, right, top, bottom, top-left, top-right, bottom-left, bottom-right.',
     'Allowed target modes: selected, last, shape, position, any, semantic.',
     'Targets may include filters: { mode, id?, shape?, color?, position?, groupId?, groupLabel?, partLabel? }.',
+    'Allowed move spatial relations: left-of, right-of, above, below.',
+    'Allowed move spatial alignments: preserve, center, start, end. preserve keeps the current cross-axis coordinate and is the default; center aligns centers on the cross axis; start aligns top/left edges; end aligns bottom/right edges.',
     'Allowed addSceneObject anchor relations: left-of, right-of, above, below, near, inside, around.',
     'addSceneObject anchor may include { groupId?, groupLabel?, partLabel?, relation? } to explain what existing object the new content is placed relative to.',
     'Use target mode "semantic" when editing AI-generated scene graph objects or parts by their labels.',
@@ -223,6 +226,17 @@ function buildPlannerPrompt(input) {
     '- Use the local parser result as a hint, not as authority. If it is unsafe, incomplete, or clearly caused by noisy speech, normalize to the best supported command.',
     '- If the user intent is unclear, ambiguous, unsafe, or unsupported, return { "action": "unknown", "reason": "unsupported-action", "sourceText": original text }.',
     '- If the user edits a scene object and one semanticGroups entry clearly matches their wording, include its groupId in the semantic target. If several entries still match and none is selected, return a semantic target without groupId so the UI can ask for clarification.',
+    '- Use move mode "spatial" when the user asks to place, put, align, or move an existing target relative to another existing reference object. This is an edit operation, not a scene or addSceneObject command.',
+    '- In move spatial, target is the object being moved and reference is the stationary object used for placement. Do not swap them.',
+    '- For move spatial, relation describes where the moved target should end up relative to the reference: left-of, right-of, above, below.',
+    '- For any semantic object, object-level wording targets the whole semantic group by default. Do not add partLabel unless the user explicitly names a component/part.',
+    '- Examples of object-level wording: "这棵树", "这座房子", "这个太阳", "这朵云", "这辆车", "这个机器人", or a bare object name such as "树" or "房子".',
+    '- Examples of part-level wording: "树冠", "树干", "房子的屋顶", "房子的门", "太阳的光线". Only these explicit part references should include partLabel.',
+    '- For relative moves such as "把这棵树往右边移动一点" or "把房子往右移动一点", target the whole semantic group. Do not target only a visual part such as 树冠, 树干, 墙体, 屋顶, or 门.',
+    '- Do not convert object-to-object placement into an absolute canvas position. Phrases such as "地面的上方", "房子右边", "云上方", or "贴着水平线" must use move spatial with a reference target.',
+    '- For move spatial alignment, use preserve by default so "放到右边" changes x only and "贴着地面/移动到上方" changes y only. Use center/start/end only when the user explicitly asks to align centers, left/right edges, top/bottom edges, or otherwise requests cross-axis alignment.',
+    '- For phrases such as "底部贴着水平线" or "底部贴着地面", use relation "above", align "preserve", gap 0, with the line/ground as reference so the target bottom touches the line top without horizontal movement.',
+    '- Use gap 0 when the user says 贴着, 靠着, 挨着, aligned, or touching. Use a small gap such as 16 or 24 for normal beside/above/below placement.',
     '- Use action "scene" only when the user asks to create, draw, or regenerate a whole scene or composition from scratch.',
     '- Use action "addSceneObject" when the user asks to add, insert, place, generate another, create one more, or put a semantic object/content onto an existing canvas. Chinese cues include "再", "再来", "添加", "新增", "加一个", "放一个", "在...旁边", "在...右边", "在...左边".',
     '- For addSceneObject, elements must contain only the newly added object/content. Do not repeat existing houses, trees, suns, ground, labels, or other canvas objects unless the user explicitly asks to duplicate that exact object.',
@@ -249,6 +263,12 @@ function buildPlannerPrompt(input) {
     '- Example: "把绿色的圆圈移动到右上角" -> { "action": "move", "target": { "mode": "shape", "shape": "circle", "color": "green" }, "mode": "absolute", "position": "top-right", "sourceText": original text, "correction": { "interpretedIntent": "把绿色圆形移动到右上角", "confidence": "high" } }.',
     '- Example: "把房子的屋顶改成蓝色" -> { "action": "recolor", "target": { "mode": "semantic", "groupLabel": "房子", "partLabel": "屋顶" }, "color": "blue", "sourceText": original text }.',
     '- Example: "把树往右移动一点" -> { "action": "move", "target": { "mode": "semantic", "groupLabel": "树" }, "mode": "relative", "direction": "right", "distance": 48, "sourceText": original text }.',
+    '- Example: "把这棵树往右边移动一点" -> { "action": "move", "target": { "mode": "semantic", "groupLabel": "树" }, "mode": "relative", "direction": "right", "distance": 48, "sourceText": original text }. Do not add partLabel.',
+    '- Example: "把房子往右移动一点" -> { "action": "move", "target": { "mode": "semantic", "groupLabel": "房子" }, "mode": "relative", "direction": "right", "distance": 48, "sourceText": original text }. Do not target only 墙体, 屋顶, or 门.',
+    '- Example: "把树放到房子右边" -> { "action": "move", "target": { "mode": "semantic", "groupLabel": "树" }, "mode": "spatial", "reference": { "mode": "semantic", "groupLabel": "房子" }, "relation": "right-of", "align": "preserve", "gap": 24, "sourceText": original text }.',
+    '- Example: "把这颗树移动到地面的上方" -> { "action": "move", "target": { "mode": "semantic", "groupLabel": "树" }, "mode": "spatial", "reference": { "mode": "semantic", "groupLabel": "地面" }, "relation": "above", "align": "preserve", "gap": 0, "sourceText": original text }. Do not target only 树冠 and do not move horizontally.',
+    '- Example: "把太阳放到云上方" -> { "action": "move", "target": { "mode": "semantic", "groupLabel": "太阳" }, "mode": "spatial", "reference": { "mode": "semantic", "groupLabel": "云" }, "relation": "above", "align": "preserve", "gap": 16, "sourceText": original text }.',
+    '- Example: "让树的底部贴着水平线" -> { "action": "move", "target": { "mode": "semantic", "groupLabel": "树" }, "mode": "spatial", "reference": { "mode": "semantic", "groupLabel": "水平线" }, "relation": "above", "align": "preserve", "gap": 0, "sourceText": original text }.',
     '- Example: "删除太阳" when the canvas contains a scene group labeled 太阳 -> { "action": "delete", "target": { "mode": "semantic", "groupLabel": "太阳" }, "sourceText": original text }.',
     '- Example: "话不左边宽一点" -> { "action": "resizeCanvas", "mode": "relative", "direction": "wider", "anchor": "left", "amount": 120, "sourceText": original text, "correction": { "correctedText": "画布左边宽一点", "interpretedIntent": "从左侧增加画布宽度约 120px", "explanation": "将“话不”纠正为“画布”", "confidence": "high" } }.',
     '- Example: "把绿的圆挪右上一点" -> target { mode: "shape", shape: "circle", color: "green" }, mode "absolute", position "top-right".',

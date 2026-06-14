@@ -188,6 +188,72 @@ function clampGroupDelta(
   }
 }
 
+function getSpatialMoveDelta(
+  targetBounds: ReturnType<typeof getShapesBounds>,
+  referenceBounds: ReturnType<typeof getShapesBounds>,
+  command: Extract<MoveShapeCommand, { mode: 'spatial' }>,
+) {
+  const gap = Math.max(0, Math.min(command.gap ?? 24, 240))
+  const align = command.align ?? 'preserve'
+  const referenceCenterX = referenceBounds.x + referenceBounds.width / 2
+  const referenceCenterY = referenceBounds.y + referenceBounds.height / 2
+  let nextX = targetBounds.x
+  let nextY = targetBounds.y
+
+  if (command.relation === 'left-of') {
+    nextX = referenceBounds.x - targetBounds.width - gap
+    nextY =
+      align === 'preserve'
+        ? targetBounds.y
+        : align === 'start'
+        ? referenceBounds.y
+        : align === 'end'
+          ? referenceBounds.y + referenceBounds.height - targetBounds.height
+          : referenceCenterY - targetBounds.height / 2
+  }
+
+  if (command.relation === 'right-of') {
+    nextX = referenceBounds.x + referenceBounds.width + gap
+    nextY =
+      align === 'preserve'
+        ? targetBounds.y
+        : align === 'start'
+        ? referenceBounds.y
+        : align === 'end'
+          ? referenceBounds.y + referenceBounds.height - targetBounds.height
+          : referenceCenterY - targetBounds.height / 2
+  }
+
+  if (command.relation === 'above') {
+    nextY = referenceBounds.y - targetBounds.height - gap
+    nextX =
+      align === 'preserve'
+        ? targetBounds.x
+        : align === 'start'
+        ? referenceBounds.x
+        : align === 'end'
+          ? referenceBounds.x + referenceBounds.width - targetBounds.width
+          : referenceCenterX - targetBounds.width / 2
+  }
+
+  if (command.relation === 'below') {
+    nextY = referenceBounds.y + referenceBounds.height + gap
+    nextX =
+      align === 'preserve'
+        ? targetBounds.x
+        : align === 'start'
+        ? referenceBounds.x
+        : align === 'end'
+          ? referenceBounds.x + referenceBounds.width - targetBounds.width
+          : referenceCenterX - targetBounds.width / 2
+  }
+
+  return {
+    x: Math.round(nextX - targetBounds.x),
+    y: Math.round(nextY - targetBounds.y),
+  }
+}
+
 function getBoundsDeltaInsideCanvas(
   canvas: Pick<CanvasState, 'width' | 'height'>,
   bounds: ReturnType<typeof getShapesBounds>,
@@ -387,6 +453,16 @@ export function applyMoveCommand(
             ? distance
             : 0,
     }
+  } else if (command.mode === 'spatial') {
+    const referenceShapes = findTargetShapes(state, command.reference)
+
+    if (referenceShapes.length === 0) {
+      return state
+    }
+
+    const referenceBounds = getShapesBounds(referenceShapes)
+
+    delta = getSpatialMoveDelta(bounds, referenceBounds, command)
   } else {
     const position = getShapePosition({ position: command.position }, state, bounds)
 

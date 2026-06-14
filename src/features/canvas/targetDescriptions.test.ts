@@ -316,6 +316,94 @@ describe('createTargetFeedback', () => {
     })
   })
 
+  it('asks for reference clarification when a spatial move reference is ambiguous', () => {
+    const canvas: CanvasState = {
+      ...baseCanvas,
+      shapes: [
+        {
+          id: 'tree',
+          type: 'circle',
+          x: 80,
+          y: 230,
+          width: 150,
+          height: 150,
+          fill: '#22c55e',
+          stroke: '#166534',
+          groupId: 'tree-1',
+          groupLabel: '树',
+        },
+        {
+          id: 'left-house',
+          type: 'rect',
+          x: 120,
+          y: 330,
+          width: 180,
+          height: 120,
+          fill: '#f97316',
+          stroke: '#9a3412',
+          groupId: 'house-1',
+          groupLabel: '房子',
+        },
+        {
+          id: 'right-house',
+          type: 'rect',
+          x: 620,
+          y: 330,
+          width: 180,
+          height: 120,
+          fill: '#f97316',
+          stroke: '#9a3412',
+          groupId: 'house-2',
+          groupLabel: '房子',
+        },
+      ],
+    }
+
+    expect(
+      createTargetFeedback(
+        {
+          action: 'move',
+          target: {
+            mode: 'semantic',
+            groupLabel: '树',
+          },
+          mode: 'spatial',
+          reference: {
+            mode: 'semantic',
+            groupLabel: '房子',
+          },
+          relation: 'right-of',
+          align: 'end',
+          gap: 24,
+          sourceText: '把树放到房子右边',
+        },
+        canvas,
+      ),
+    ).toMatchObject({
+      status: 'ambiguous',
+      role: 'reference',
+      message: '找到 2 个可作为参照物的房子，请说得更具体一些。',
+      candidates: [
+        {
+          id: 'house-1',
+          target: {
+            mode: 'semantic',
+            groupId: 'house-1',
+            groupLabel: '房子',
+          },
+        },
+        {
+          id: 'house-2',
+          target: {
+            mode: 'semantic',
+            groupId: 'house-2',
+            groupLabel: '房子',
+          },
+        },
+      ],
+    })
+  })
+
   it('explains when no target matches', () => {
     expect(
       createTargetFeedback(

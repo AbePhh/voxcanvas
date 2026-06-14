@@ -5,6 +5,7 @@ import {
 } from './commandDictionaries'
 import type { CommandPosition, CommandTarget, ParsedCommand } from './types'
 import type { TargetCandidate } from '../canvas/targetDescriptions'
+import type { TargetFeedbackRole } from '../canvas/targetDescriptions'
 import type { ShapeKind } from '../canvas/types'
 
 type EditableCommand = Extract<
@@ -16,6 +17,7 @@ export type PendingClarification = {
   command: EditableCommand
   candidates: TargetCandidate[]
   sourceText: string
+  role: TargetFeedbackRole
 }
 
 function normalizeText(text: string) {
@@ -105,6 +107,7 @@ export function createPendingClarification(
   command: ParsedCommand,
   candidates: TargetCandidate[],
   sourceText: string,
+  role: TargetFeedbackRole = 'target',
 ): PendingClarification | null {
   if (
     command.action !== 'move' &&
@@ -119,6 +122,25 @@ export function createPendingClarification(
     command,
     candidates,
     sourceText,
+    role,
+  }
+}
+
+function applyClarifiedTarget(
+  command: EditableCommand,
+  target: CommandTarget,
+  role: TargetFeedbackRole,
+): EditableCommand {
+  if (role === 'reference' && command.action === 'move' && command.mode === 'spatial') {
+    return {
+      ...command,
+      reference: target,
+    }
+  }
+
+  return {
+    ...command,
+    target,
   }
 }
 
@@ -143,11 +165,14 @@ export function resolveClarificationResponse(
     }
 
     return {
-      ...pending.command,
-      target: candidate.target ?? {
-        mode: 'any',
-        id: candidate.id,
-      },
+      ...applyClarifiedTarget(
+        pending.command,
+        candidate.target ?? {
+          mode: 'any',
+          id: candidate.id,
+        },
+        pending.role,
+      ),
       sourceText: `${pending.sourceText}；澄清：${rawText}`,
     }
   }
@@ -156,9 +181,19 @@ export function resolveClarificationResponse(
     return null
   }
 
+  const baseTarget =
+    pending.role === 'reference' &&
+    pending.command.action === 'move' &&
+    pending.command.mode === 'spatial'
+      ? pending.command.reference
+      : pending.command.target
+
   return {
-    ...pending.command,
-    target: mergeTarget(pending.command.target, clarifiedTarget),
+    ...applyClarifiedTarget(
+      pending.command,
+      mergeTarget(baseTarget, clarifiedTarget),
+      pending.role,
+    ),
     sourceText: `${pending.sourceText}；澄清：${rawText}`,
   }
 }

@@ -39,6 +39,9 @@ export type CommandPosition =
 
 export type CommandSize = 'small' | 'medium' | 'large'
 export type ExportFormat = 'png' | 'jpg' | 'svg'
+export type MoveDirection = 'left' | 'right' | 'up' | 'down'
+export type SpatialMoveRelation = 'left-of' | 'right-of' | 'above' | 'below'
+export type SpatialMoveAlignment = 'preserve' | 'center' | 'start' | 'end'
 
 export type CanvasResizeDirection =
   | 'larger'
@@ -80,15 +83,32 @@ export type CommandTarget = {
   partLabel?: string
 }
 
-export type MoveShapeCommand = {
-  action: 'move'
-  target: CommandTarget
-  mode: 'absolute' | 'relative'
-  position?: CommandPosition
-  direction?: 'left' | 'right' | 'up' | 'down'
-  distance?: number
-  sourceText: string
-}
+export type MoveShapeCommand =
+  | {
+      action: 'move'
+      target: CommandTarget
+      mode: 'absolute'
+      position: CommandPosition
+      sourceText: string
+    }
+  | {
+      action: 'move'
+      target: CommandTarget
+      mode: 'relative'
+      direction: MoveDirection
+      distance?: number
+      sourceText: string
+    }
+  | {
+      action: 'move'
+      target: CommandTarget
+      mode: 'spatial'
+      reference: CommandTarget
+      relation: SpatialMoveRelation
+      align?: SpatialMoveAlignment
+      gap?: number
+      sourceText: string
+    }
 
 export type RecolorShapeCommand = {
   action: 'recolor'

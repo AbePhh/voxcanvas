@@ -1,5 +1,5 @@
 import { colorLabels, positionLabels, shapeLabels } from './commandLabels'
-import type { CommandTarget, ParsedCommand } from './types'
+import type { CommandTarget, ParsedCommand, SpatialMoveRelation } from './types'
 import type { CommandCorrectionSummary } from '../planner/types'
 
 export type CommandExecutionFeedback = {
@@ -48,6 +48,13 @@ function describeTarget(target: CommandTarget) {
   return parts.length > 0 ? parts.join('') : '匹配的对象'
 }
 
+const spatialRelationLabels: Record<SpatialMoveRelation, string> = {
+  'left-of': '左侧',
+  'right-of': '右侧',
+  above: '上方',
+  below: '下方',
+}
+
 function describeCommand(command: ParsedCommand) {
   if (command.action === 'unknown') {
     return {
@@ -80,19 +87,24 @@ function describeCommand(command: ParsedCommand) {
 
   if (command.action === 'move') {
     const target = describeTarget(command.target)
+    const reference = command.mode === 'spatial' ? describeTarget(command.reference) : null
     const summary =
-      command.mode === 'relative'
-        ? `将${target}向${command.direction === 'left' ? '左' : command.direction === 'right' ? '右' : command.direction === 'up' ? '上' : '下'}移动。`
-        : `将${target}移动到${command.position ? positionLabels[command.position] : '指定位置'}。`
+      command.mode === 'spatial'
+        ? `将${target}放到${reference}的${spatialRelationLabels[command.relation]}。`
+        : command.mode === 'relative'
+          ? `将${target}向${command.direction === 'left' ? '左' : command.direction === 'right' ? '右' : command.direction === 'up' ? '上' : '下'}移动。`
+          : `将${target}移动到${command.position ? positionLabels[command.position] : '指定位置'}。`
 
     return {
       title: '移动对象',
       summary,
       details: [
         `目标：${target}`,
-        command.mode === 'relative'
-          ? `距离：${command.distance ?? 48}px`
-          : `位置：${command.position ? positionLabels[command.position] : '未指定'}`,
+        command.mode === 'spatial'
+          ? `参照物：${reference}，关系：${spatialRelationLabels[command.relation]}，间距：${command.gap ?? 24}px`
+          : command.mode === 'relative'
+            ? `距离：${command.distance ?? 48}px`
+            : `位置：${command.position ? positionLabels[command.position] : '未指定'}`,
       ],
     }
   }
