@@ -1,5 +1,6 @@
 import { validatePlannedCommand } from './commandValidator'
 import { createAlignmentFallbackCommand } from './alignmentFallback'
+import { createImplicitMultiCreateBatchCommand } from '../commands/implicitMultiCreate'
 import type { CommandPlanner, CommandPlannerResult } from './types'
 import { getNormalizationDecision } from './normalizationPolicy'
 import type { ParsedCommand } from '../commands/types'
@@ -12,6 +13,18 @@ type PlannerApiResponse = {
 
 function validateAlignmentFallback(input: Parameters<CommandPlanner>[0]) {
   const fallbackCommand = createAlignmentFallbackCommand(input.sourceText)
+
+  return fallbackCommand
+    ? validatePlannedCommand(fallbackCommand, {
+        canvas: input.canvas,
+        sourceText: input.sourceText,
+        localCommand: input.localCommand,
+      })
+    : null
+}
+
+function validateImplicitMultiCreateFallback(input: Parameters<CommandPlanner>[0]) {
+  const fallbackCommand = createImplicitMultiCreateBatchCommand(input.sourceText)
 
   return fallbackCommand
     ? validatePlannedCommand(fallbackCommand, {
@@ -47,6 +60,19 @@ export const aiPlanner: CommandPlanner = async (input): Promise<CommandPlannerRe
       sourceText: input.sourceText,
       localCommand: input.localCommand,
     })
+
+    if (
+      plannedResult.status === 'invalid' &&
+      (plannedResult.reason === 'unsupported-action' ||
+        plannedResult.reason === 'multi-step-command-requires-batch' ||
+        plannedResult.reason.startsWith('invalid-batch-step'))
+    ) {
+      const fallbackResult = validateImplicitMultiCreateFallback(input)
+
+      if (fallbackResult) {
+        return fallbackResult
+      }
+    }
 
     if (
       plannedResult.status === 'invalid' &&

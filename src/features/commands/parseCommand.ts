@@ -16,6 +16,7 @@ import type {
   ParsedCommand,
 } from './types'
 import type { ShapeKind } from '../canvas/types'
+import { createImplicitMultiCreateBatchCommand } from './implicitMultiCreate'
 
 function normalizeCommandText(text: string) {
   return text.replace(/\s+/g, '').replace(/[，。！？、,.!?]/g, '').trim()
@@ -431,6 +432,12 @@ export function parseCommand(rawText: string): ParsedCommand {
 
   if (canvasResizeCommand) {
     return canvasResizeCommand
+  }
+
+  const implicitMultiCreateCommand = createImplicitMultiCreateBatchCommand(sourceText)
+
+  if (implicitMultiCreateCommand) {
+    return implicitMultiCreateCommand
   }
 
   const editAction = detectEditAction(text)

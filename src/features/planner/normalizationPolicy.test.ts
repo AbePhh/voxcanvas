@@ -91,6 +91,62 @@ describe('getNormalizationDecision', () => {
     })
   })
 
+  it('routes implicit multi-create commands to AI batch planning', () => {
+    expect(
+      getNormalizationDecision(
+        '画一个黄色圆形在右边画一个蓝色矩形在中间画一个红色三角形在左边',
+        confidentCreateCommand,
+      ),
+    ).toEqual({
+      useAi: true,
+      reason: 'implicit-multi-create-command',
+    })
+
+    expect(
+      getNormalizationDecision(
+        '画一个黄色圆形在右边，画一个蓝色矩形在中间，画一个红色三角形在左边',
+        confidentCreateCommand,
+      ),
+    ).toEqual({
+      useAi: true,
+      reason: 'implicit-multi-create-command',
+    })
+  })
+
+  it('keeps validated local implicit multi-create batches on the local path', () => {
+    expect(
+      getNormalizationDecision(
+        '画一个黄色圆形在右边画一个蓝色矩形在中间画一个红色三角形在左边',
+        {
+          action: 'batch',
+          sourceText:
+            '画一个黄色圆形在右边画一个蓝色矩形在中间画一个红色三角形在左边',
+          commands: [
+            {
+              action: 'create',
+              shape: 'circle',
+              color: 'yellow',
+              position: 'right',
+              size: 'medium',
+              sourceText: '画一个黄色圆形在右边',
+            },
+            {
+              action: 'create',
+              shape: 'rect',
+              color: 'blue',
+              position: 'center',
+              size: 'medium',
+              sourceText: '画一个蓝色矩形在中间',
+            },
+          ],
+        },
+      ),
+    ).toEqual({
+      useAi: false,
+      reason: 'local-command-is-confident',
+    })
+  })
+
   it('does not fallback to a local single-shape command for complex scenes', () => {
     const decision = getNormalizationDecision(
       '画一间房子旁边有一棵树右上角有太阳',
