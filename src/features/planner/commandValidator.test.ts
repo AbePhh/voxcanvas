@@ -1528,6 +1528,605 @@ describe('validatePlannedCommand', () => {
       },
     })
   })
+
+  it('accepts valid multi-step edit commands from planner output', () => {
+    const canvasWithHouse = {
+      ...canvasWithOneCircle,
+      semanticGroups: [
+        {
+          id: 'house-1',
+          groupId: 'house-1',
+          groupLabel: '房子',
+          displayLabel: '房子',
+          referenceLabels: ['房子', 'house-1'],
+          partLabels: ['墙体', '屋顶'],
+          objectIds: ['house-wall', 'house-roof'],
+          bounds: { x: 260, y: 210, width: 320, height: 240 },
+          selected: false,
+        },
+      ],
+      objects: [
+        {
+          id: 'house-wall',
+          type: 'rect' as const,
+          x: 300,
+          y: 300,
+          width: 240,
+          height: 150,
+          fill: '#f97316',
+          text: undefined,
+          groupId: 'house-1',
+          groupLabel: '房子',
+          partLabel: '墙体',
+        },
+        {
+          id: 'house-roof',
+          type: 'triangle' as const,
+          x: 260,
+          y: 210,
+          width: 320,
+          height: 120,
+          fill: '#ef4444',
+          text: undefined,
+          groupId: 'house-1',
+          groupLabel: '房子',
+          partLabel: '屋顶',
+        },
+      ],
+    }
+
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'batch',
+          sourceText: '把房子往右边移动一点，屋顶变成黑色',
+          commands: [
+            {
+              action: 'move',
+              target: { mode: 'semantic', groupLabel: '房子' },
+              mode: 'relative',
+              direction: 'right',
+              distance: 48,
+              sourceText: '把房子往右边移动一点',
+            },
+            {
+              action: 'recolor',
+              target: { mode: 'semantic', groupLabel: '房子', partLabel: '屋顶' },
+              color: 'black',
+              sourceText: '屋顶变成黑色',
+            },
+          ],
+          correction: {
+            interpretedIntent: '先移动房子，再把屋顶改成黑色',
+            confidence: 'high',
+          },
+        },
+        { canvas: canvasWithHouse },
+      ),
+    ).toMatchObject({
+      status: 'planned',
+      correction: {
+        interpretedIntent: '先移动房子，再把屋顶改成黑色',
+      },
+      command: {
+        action: 'batch',
+        commands: [
+          {
+            action: 'move',
+            target: {
+              mode: 'semantic',
+              groupId: 'house-1',
+              groupLabel: '房子',
+            },
+          },
+          {
+            action: 'recolor',
+            target: {
+              mode: 'semantic',
+              groupId: 'house-1',
+              groupLabel: '房子',
+              partLabel: '屋顶',
+            },
+            color: 'black',
+          },
+        ],
+      },
+    })
+  })
+
+  it('accepts resize plus recolor as one ordered batch', () => {
+    const canvasWithTree = {
+      ...canvasWithOneCircle,
+      semanticGroups: [
+        {
+          id: 'tree-1',
+          groupId: 'tree-1',
+          groupLabel: '树',
+          displayLabel: '树',
+          referenceLabels: ['树', 'tree-1'],
+          partLabels: ['树干', '树冠'],
+          objectIds: ['tree-trunk', 'tree-crown'],
+          bounds: { x: 280, y: 180, width: 160, height: 250 },
+          selected: false,
+        },
+      ],
+      objects: [
+        {
+          id: 'tree-trunk',
+          type: 'rect' as const,
+          x: 350,
+          y: 300,
+          width: 48,
+          height: 130,
+          fill: '#92400e',
+          text: undefined,
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树干',
+        },
+        {
+          id: 'tree-crown',
+          type: 'circle' as const,
+          x: 280,
+          y: 180,
+          width: 160,
+          height: 160,
+          fill: '#22c55e',
+          text: undefined,
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树冠',
+        },
+      ],
+    }
+
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'batch',
+          sourceText: '把树缩小一点，然后把树冠改成黄色',
+          commands: [
+            {
+              action: 'resize',
+              target: { mode: 'semantic', groupLabel: '树' },
+              direction: 'smaller',
+              sourceText: '把树缩小一点',
+            },
+            {
+              action: 'recolor',
+              target: { mode: 'semantic', groupLabel: '树', partLabel: '树冠' },
+              color: 'yellow',
+              sourceText: '把树冠改成黄色',
+            },
+          ],
+        },
+        { canvas: canvasWithTree },
+      ),
+    ).toMatchObject({
+      status: 'planned',
+      command: {
+        action: 'batch',
+        commands: [
+          {
+            action: 'resize',
+            target: {
+              mode: 'semantic',
+              groupId: 'tree-1',
+              groupLabel: '树',
+            },
+          },
+          {
+            action: 'recolor',
+            target: {
+              mode: 'semantic',
+              groupId: 'tree-1',
+              groupLabel: '树',
+              partLabel: '树冠',
+            },
+            color: 'yellow',
+          },
+        ],
+      },
+    })
+  })
+
+  it('rejects single-step planner output for multi-step utterances', () => {
+    const canvasWithTreeAndHouse = {
+      ...canvasWithOneCircle,
+      semanticGroups: [
+        {
+          id: 'tree-1',
+          groupId: 'tree-1',
+          groupLabel: '树',
+          displayLabel: '树',
+          referenceLabels: ['树', 'tree-1'],
+          partLabels: ['树干', '树冠'],
+          objectIds: ['tree-trunk', 'tree-crown'],
+          bounds: { x: 280, y: 180, width: 160, height: 250 },
+          selected: false,
+        },
+        {
+          id: 'house-1',
+          groupId: 'house-1',
+          groupLabel: '房子',
+          displayLabel: '房子',
+          referenceLabels: ['房子', 'house-1'],
+          partLabels: ['墙体', '屋顶'],
+          objectIds: ['house-wall', 'house-roof'],
+          bounds: { x: 520, y: 220, width: 240, height: 210 },
+          selected: false,
+        },
+      ],
+      objects: [
+        {
+          id: 'tree-trunk',
+          type: 'rect' as const,
+          x: 350,
+          y: 300,
+          width: 48,
+          height: 130,
+          fill: '#92400e',
+          text: undefined,
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树干',
+        },
+        {
+          id: 'tree-crown',
+          type: 'circle' as const,
+          x: 280,
+          y: 180,
+          width: 160,
+          height: 160,
+          fill: '#22c55e',
+          text: undefined,
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树冠',
+        },
+        {
+          id: 'house-wall',
+          type: 'rect' as const,
+          x: 550,
+          y: 310,
+          width: 180,
+          height: 120,
+          fill: '#f97316',
+          text: undefined,
+          groupId: 'house-1',
+          groupLabel: '房子',
+          partLabel: '墙体',
+        },
+        {
+          id: 'house-roof',
+          type: 'triangle' as const,
+          x: 520,
+          y: 220,
+          width: 240,
+          height: 110,
+          fill: '#ef4444',
+          text: undefined,
+          groupId: 'house-1',
+          groupLabel: '房子',
+          partLabel: '屋顶',
+        },
+      ],
+    }
+
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'resize',
+          target: { mode: 'semantic', groupId: 'tree-1', groupLabel: '树' },
+          direction: 'smaller',
+          sourceText: '把树缩小一点，然后把树冠改成黄色',
+        },
+        { canvas: canvasWithTreeAndHouse },
+      ),
+    ).toMatchObject({
+      status: 'invalid',
+      reason: 'multi-step-command-requires-batch',
+    })
+
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'create',
+          shape: 'circle',
+          color: 'red',
+          size: 'medium',
+          sourceText: '画一个红色圆形，然后把它移动到右上角',
+        },
+        {
+          canvas: {
+            ...canvasWithOneCircle,
+            selectedId: undefined,
+            objects: [],
+            semanticGroups: [],
+          },
+        },
+      ),
+    ).toMatchObject({
+      status: 'invalid',
+      reason: 'multi-step-command-requires-batch',
+    })
+
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'move',
+          target: { mode: 'semantic', groupId: 'house-1', groupLabel: '房子' },
+          mode: 'relative',
+          direction: 'right',
+          distance: 48,
+          sourceText: '把房子往右边移动一点，屋顶变成黑色',
+        },
+        { canvas: canvasWithTreeAndHouse },
+      ),
+    ).toMatchObject({
+      status: 'invalid',
+      reason: 'multi-step-command-requires-batch',
+    })
+  })
+
+  it('allows later batch steps to target the object created by an earlier step', () => {
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'batch',
+          sourceText: '画一个红色圆形，然后把它移动到右上角',
+          commands: [
+            {
+              action: 'create',
+              shape: 'circle',
+              color: 'red',
+              position: 'center',
+              size: 'medium',
+              sourceText: '画一个红色圆形',
+            },
+            {
+              action: 'move',
+              target: { mode: 'selected' },
+              mode: 'absolute',
+              position: 'top-right',
+              sourceText: '把它移动到右上角',
+            },
+          ],
+        },
+        {
+          canvas: {
+            ...canvasWithOneCircle,
+            selectedId: undefined,
+            objects: [],
+            semanticGroups: [],
+          },
+        },
+      ),
+    ).toMatchObject({
+      status: 'planned',
+      command: {
+        action: 'batch',
+        commands: [
+          {
+            action: 'create',
+          },
+          {
+            action: 'move',
+            target: { mode: 'selected' },
+          },
+        ],
+      },
+    })
+  })
+
+  it('accepts three-step batch commands with inherited selected targets', () => {
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'batch',
+          sourceText: '画一个红色圆形，然后把它移动到右上角，再把它改成蓝色',
+          commands: [
+            {
+              action: 'create',
+              shape: 'circle',
+              color: 'red',
+              position: 'center',
+              size: 'medium',
+              sourceText: '画一个红色圆形',
+            },
+            {
+              action: 'move',
+              target: { mode: 'selected' },
+              mode: 'absolute',
+              position: 'top-right',
+              sourceText: '把它移动到右上角',
+            },
+            {
+              action: 'recolor',
+              target: { mode: 'selected' },
+              color: 'blue',
+              sourceText: '再把它改成蓝色',
+            },
+          ],
+        },
+        {
+          canvas: {
+            ...canvasWithOneCircle,
+            selectedId: undefined,
+            objects: [],
+            semanticGroups: [],
+          },
+        },
+      ),
+    ).toMatchObject({
+      status: 'planned',
+      command: {
+        action: 'batch',
+        commands: [
+          {
+            action: 'create',
+          },
+          {
+            action: 'move',
+            target: { mode: 'selected' },
+          },
+          {
+            action: 'recolor',
+            target: { mode: 'selected' },
+            color: 'blue',
+          },
+        ],
+      },
+    })
+  })
+
+  it('rejects batch steps that reference planner-only transient ids', () => {
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'batch',
+          sourceText: '画一个红色圆形，然后把它移动到右上角',
+          commands: [
+            {
+              action: 'create',
+              shape: 'circle',
+              color: 'red',
+              position: 'center',
+              size: 'medium',
+              sourceText: '画一个红色圆形',
+            },
+            {
+              action: 'move',
+              target: { mode: 'any', id: 'batch-circle-1' },
+              mode: 'absolute',
+              position: 'top-right',
+              sourceText: '把它移动到右上角',
+            },
+          ],
+        },
+        {
+          canvas: {
+            ...canvasWithOneCircle,
+            selectedId: undefined,
+            objects: [],
+            semanticGroups: [],
+          },
+        },
+      ),
+    ).toMatchObject({
+      status: 'invalid',
+      reason: 'invalid-batch-step-transient-id',
+    })
+  })
+
+  it('rejects unsafe batch commands instead of running partial edits', () => {
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'batch',
+          sourceText: '移动圆形，然后清空画布',
+          commands: [
+            {
+              action: 'move',
+              target: { mode: 'shape', shape: 'circle' },
+              mode: 'relative',
+              direction: 'right',
+            },
+            {
+              action: 'clear',
+              sourceText: '清空画布',
+            },
+          ],
+        },
+        { canvas: canvasWithOneCircle },
+      ),
+    ).toMatchObject({
+      status: 'invalid',
+      reason: 'unsupported-batch-step',
+    })
+
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'batch',
+          sourceText: '把树往右移动一点，然后变成红色',
+          commands: [
+            {
+              action: 'move',
+              target: { mode: 'semantic', groupLabel: '树' },
+              mode: 'relative',
+              direction: 'right',
+              sourceText: '把树往右移动一点',
+            },
+            {
+              action: 'recolor',
+              target: { mode: 'semantic', groupLabel: '树' },
+              color: 'red',
+              sourceText: '变成红色',
+            },
+          ],
+        },
+        {
+          canvas: {
+            ...canvasWithOneCircle,
+            semanticGroups: [
+              {
+                id: 'tree-1',
+                groupId: 'tree-1',
+                groupLabel: '树',
+                displayLabel: '树 1',
+                referenceLabels: ['树 1', 'tree-1'],
+                partLabels: ['树冠'],
+                objectIds: ['tree-1-top'],
+                bounds: { x: 100, y: 100, width: 80, height: 80 },
+                selected: false,
+              },
+              {
+                id: 'tree-2',
+                groupId: 'tree-2',
+                groupLabel: '树',
+                displayLabel: '树 2',
+                referenceLabels: ['树 2', 'tree-2'],
+                partLabels: ['树冠'],
+                objectIds: ['tree-2-top'],
+                bounds: { x: 300, y: 100, width: 80, height: 80 },
+                selected: false,
+              },
+            ],
+            objects: [
+              {
+                id: 'tree-1-top',
+                type: 'circle',
+                x: 100,
+                y: 100,
+                width: 80,
+                height: 80,
+                fill: '#22c55e',
+                text: undefined,
+                groupId: 'tree-1',
+                groupLabel: '树',
+              },
+              {
+                id: 'tree-2-top',
+                type: 'circle',
+                x: 300,
+                y: 100,
+                width: 80,
+                height: 80,
+                fill: '#22c55e',
+                text: undefined,
+                groupId: 'tree-2',
+                groupLabel: '树',
+              },
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({
+      status: 'invalid',
+      reason: 'invalid-batch-step-ambiguous-target',
+    })
+  })
 })
 
 describe('createPlannerInput', () => {

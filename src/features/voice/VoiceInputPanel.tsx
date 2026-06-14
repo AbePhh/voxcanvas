@@ -11,6 +11,7 @@ import { isCancellationIntent } from '../commands/cancellationIntent'
 import {
   createCancellationFeedback,
   createCommandExecutionFeedback,
+  createPlannerBlockedFeedback,
 } from '../commands/commandFeedback'
 import type {
   CommandExecutionFeedback,
@@ -340,6 +341,19 @@ export function VoiceInputPanel({
           })
           return
         }
+      }
+
+      if (result.status === 'invalid') {
+        queueMicrotask(() => {
+          setClarificationFeedback(null)
+          setPendingClarification(null)
+          setPendingExportClarification(null)
+          setPendingMissingAnchor(null)
+          setLocalExecutionFeedback(
+            createPlannerBlockedFeedback(result.reason, commandText),
+          )
+        })
+        return
       }
 
       if (localTargetFeedback.status !== 'ok') {

@@ -31,6 +31,7 @@ export function PlannerPreview({
   const previewResult = result ?? createFallbackPlannerResult(input)
   const plannedCommand =
     previewResult.status === 'planned' ? previewResult.command : null
+  const plannedBatch = plannedCommand?.action === 'batch' ? plannedCommand : null
   const plannedScene = plannedCommand?.action === 'scene' ? plannedCommand : null
   const plannedAddition =
     plannedCommand?.action === 'addSceneObject' ? plannedCommand : null
@@ -43,7 +44,9 @@ export function PlannerPreview({
           ? 'Addition Plan'
           : plannedScene
             ? 'Scene Plan'
-            : 'Planner Fallback'}
+            : plannedBatch
+              ? 'Multi-step Plan'
+              : 'Planner Fallback'}
       </h3>
       {isPlanning ? <p>AI planner is interpreting this command...</p> : null}
       {!isPlanning && previewResult.status === 'needs-ai' ? (
@@ -55,7 +58,13 @@ export function PlannerPreview({
       {!isPlanning && previewResult.status === 'planned' ? (
         <p>
           AI planner returned a valid{' '}
-          {plannedAddition ? 'content addition' : plannedScene ? 'scene plan' : 'command'}{' '}
+          {plannedAddition
+            ? 'content addition'
+            : plannedScene
+              ? 'scene plan'
+              : plannedBatch
+                ? 'multi-step edit plan'
+                : 'command'}{' '}
           and it was executed.
         </p>
       ) : null}
@@ -83,6 +92,13 @@ export function PlannerPreview({
       ) : null}
       {!isPlanning && previewResult.status === 'invalid' ? (
         <p>AI planner returned an invalid command: {previewResult.reason}</p>
+      ) : null}
+      {plannedBatch ? (
+        <ol className="planner-preview__steps">
+          {plannedBatch.commands.map((step, index) => (
+            <li key={`${step.action}-${index}`}>{step.action}</li>
+          ))}
+        </ol>
       ) : null}
       {plannedSceneLike ? <ScenePlanPreview command={plannedSceneLike} showSteps /> : null}
       {previewResult.status === 'planned' &&

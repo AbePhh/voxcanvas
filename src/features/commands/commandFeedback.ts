@@ -17,6 +17,11 @@ export type CommandFeedbackMetric = {
   value: string
 }
 
+export type PlannerBlockedReason =
+  | 'multi-step-command-requires-batch'
+  | 'planner-policy-violation'
+  | string
+
 export type CommandExecutionFeedbackContext = {
   source: CommandExecutionFeedback['source']
   correction?: CommandCorrectionSummary
@@ -61,6 +66,14 @@ function describeCommand(command: ParsedCommand) {
       title: '未能理解命令',
       summary: `原因：${command.reason}`,
       details: ['系统没有执行任何绘图操作。'],
+    }
+  }
+
+  if (command.action === 'batch') {
+    return {
+      title: 'Multi-step edit',
+      summary: `Run ${command.commands.length} drawing commands in sequence.`,
+      details: command.commands.map((step, index) => `Step ${index + 1}: ${step.action}`),
     }
   }
 
@@ -237,5 +250,31 @@ export function createCancellationFeedback(sourceText: string): CommandExecution
     title: '取消命令',
     summary: '已取消当前语音命令，没有执行新的绘图操作。',
     details: sourceText.trim() ? [`取消输入：${sourceText.trim()}`] : [],
+  }
+}
+
+export function createPlannerBlockedFeedback(
+  reason: PlannerBlockedReason,
+  sourceText: string,
+): CommandExecutionFeedback {
+  if (reason === 'multi-step-command-requires-batch') {
+    return {
+      source: 'ai',
+      status: 'blocked',
+      title: '多步命令未完成规划',
+      summary: 'AI 只返回了单个操作，没有保留完整的多步指令，所以系统没有执行。',
+      details: [
+        '请稍后重试；如果仍失败，需要检查 AI Planner 是否返回 action: batch。',
+        `原始命令：${sourceText}`,
+      ],
+    }
+  }
+
+  return {
+    source: 'ai',
+    status: 'blocked',
+    title: 'AI 规划被拦截',
+    summary: 'AI 返回的命令没有通过安全校验，系统没有执行任何绘图操作。',
+    details: [`原因：${reason}`, `原始命令：${sourceText}`],
   }
 }

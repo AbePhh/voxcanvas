@@ -532,6 +532,66 @@ function createDeleteFeedback(
   })
 }
 
+function createBatchFeedback(
+  command: Extract<ParsedCommand, { action: 'batch' }>,
+  before: CanvasState,
+  after: CanvasState,
+  context: CommandExecutionFeedbackContext,
+) {
+  const addedShapes = getAddedShapes(before, after)
+  const removedShapes = getRemovedShapes(before, after)
+  const changedPairs = getChangedShapePairs(before, after)
+
+  if (
+    addedShapes.length === 0 &&
+    removedShapes.length === 0 &&
+    changedPairs.length === 0 &&
+    before.width === after.width &&
+    before.height === after.height
+  ) {
+    return createNoChangeFeedback(command, context)
+  }
+
+  const movedCount = changedPairs.filter(
+    (pair) => pair.before.x !== pair.after.x || pair.before.y !== pair.after.y,
+  ).length
+  const recoloredCount = changedPairs.filter(
+    (pair) => pair.before.fill !== pair.after.fill || pair.before.stroke !== pair.after.stroke,
+  ).length
+  const resizedCount = changedPairs.filter(
+    (pair) =>
+      pair.before.width !== pair.after.width ||
+      pair.before.height !== pair.after.height ||
+      pair.before.fontSize !== pair.after.fontSize,
+  ).length
+  const detailParts = [
+    addedShapes.length > 0 ? `新增 ${addedShapes.length} 个对象` : null,
+    removedShapes.length > 0 ? `删除 ${removedShapes.length} 个对象` : null,
+    movedCount > 0 ? `移动 ${movedCount} 个对象` : null,
+    recoloredCount > 0 ? `改色 ${recoloredCount} 个对象` : null,
+    resizedCount > 0 ? `缩放 ${resizedCount} 个对象` : null,
+    before.width !== after.width || before.height !== after.height
+      ? `画布调整为 ${formatSize(after)}`
+      : null,
+  ].filter((part): part is string => Boolean(part))
+
+  return createFeedback(
+    'executed',
+    '复杂命令执行完成',
+    `已按顺序执行 ${command.commands.length} 步：${detailParts.join('，') || '画布已更新'}。`,
+    {
+      ...context,
+      metrics: [
+        { label: '执行步骤', value: `${command.commands.length} 步` },
+        { label: '新增', value: `${addedShapes.length} 个` },
+        { label: '删除', value: `${removedShapes.length} 个` },
+        { label: '修改', value: `${changedPairs.length} 个` },
+      ],
+      details: command.commands.map((step, index) => `第 ${index + 1} 步：${step.action}`),
+    },
+  )
+}
+
 function createHistoryFeedback(
   command: Extract<ParsedCommand, { action: 'undo' | 'redo' | 'clear' }>,
   before: CanvasState,
@@ -608,6 +668,10 @@ export function createPreciseExecutionFeedback(
 
   if (command.action === 'delete') {
     return createDeleteFeedback(command, before, after, context)
+  }
+
+  if (command.action === 'batch') {
+    return createBatchFeedback(command, before, after, context)
   }
 
   return createHistoryFeedback(command, before, after, context)

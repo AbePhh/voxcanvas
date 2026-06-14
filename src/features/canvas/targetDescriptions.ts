@@ -237,6 +237,12 @@ export function createTargetFeedback(
   command: ParsedCommand,
   canvasState: CanvasState,
 ): TargetFeedback {
+  if (command.action === 'batch') {
+    return {
+      status: 'ok',
+    }
+  }
+
   if (!('target' in command)) {
     return {
       status: 'ok',

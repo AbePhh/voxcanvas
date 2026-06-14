@@ -1,5 +1,6 @@
 import type { ShapeKind } from '../canvas/types'
 import type {
+  BatchStepCommand,
   CanvasResizeAnchor,
   CanvasResizeDirection,
   CommandColor,
@@ -14,8 +15,9 @@ import type {
   SpatialMoveAlignment,
   SpatialMoveRelation,
 } from '../commands/types'
-import { matchesCommandColor } from '../canvas/colorStyles'
+import { colorStyles, matchesCommandColor } from '../canvas/colorStyles'
 import { getSceneSpace, sceneGraphLimits } from '../canvas/sceneGraph'
+import { createSemanticGroupSummaries } from '../canvas/semanticGroups'
 import { matchesTargetPosition } from '../canvas/targetMatching'
 import type {
   CommandCorrectionSummary,
@@ -41,7 +43,17 @@ const allowedActions = new Set([
   'resizeCanvas',
   'scene',
   'addSceneObject',
+  'batch',
 ])
+const allowedBatchStepActions = new Set([
+  'create',
+  'move',
+  'recolor',
+  'resize',
+  'delete',
+  'resizeCanvas',
+])
+const maxBatchCommandCount = 6
 const allowedShapes = new Set<ShapeKind>(['circle', 'rect', 'triangle', 'line', 'text'])
 const allowedColors = new Set<CommandColor>([
   'red',
@@ -122,6 +134,28 @@ type ValidatorOptions = {
   canvas?: CommandPlannerInput['canvas']
   sourceText?: string
   localCommand?: ParsedCommand
+  strictTargets?: boolean
+  batchDepth?: number
+}
+
+const validationShapeSizes: Record<ShapeKind, { width: number; height: number }> = {
+  circle: { width: 96, height: 96 },
+  rect: { width: 128, height: 88 },
+  triangle: { width: 128, height: 104 },
+  line: { width: 160, height: 0 },
+  text: { width: 180, height: 42 },
+}
+
+const validationPositionAnchors: Record<CommandPosition, { x: number; y: number }> = {
+  'top-left': { x: 0.2, y: 0.22 },
+  top: { x: 0.5, y: 0.2 },
+  'top-right': { x: 0.8, y: 0.22 },
+  left: { x: 0.2, y: 0.52 },
+  center: { x: 0.5, y: 0.52 },
+  right: { x: 0.8, y: 0.52 },
+  'bottom-left': { x: 0.2, y: 0.78 },
+  bottom: { x: 0.5, y: 0.8 },
+  'bottom-right': { x: 0.8, y: 0.78 },
 }
 
 const explicitPrimitiveShapePattern =
@@ -130,6 +164,18 @@ const createIntentPattern = /画|绘制|创建|添加|生成|新增|加|放|插�
 const incrementalAdditionPattern =
   /再|再来|添加|新增|插入|创建|生成|加上|加一|加个|加一个|加只|加棵|加朵|加辆|加座|加条|加片|加颗|加块|加束|加艘|加台|放一|放个|放一个|放只|放棵|放朵|放辆|放座|放条|放片|放颗|放块|放束|放艘|放台/
 const wholeSceneResetPattern = /重新|重画|整个|完整|从头|新场景|全新场景/
+const multiStepConnectorPattern =
+  /然后|接着|随后|并且|同时|顺便|再把|再将|再让|[,，;；]|then|and then/i
+const multiStepSplitPattern =
+  /然后|接着|随后|并且|同时|顺便|再把|再将|再让|[,，;；]|then|and then/i
+const batchStepIntentPatterns = [
+  /(画|绘制|创建|添加|生成|新增|插入|加|放).{0,24}(圆形|圆圈|圆|矩形|长方形|正方形|方块|三角形|三角|线条|直线|文本|文字|文本框)/i,
+  /(移动|移到|移动到|挪|挪到|放到|放在|贴着|靠着|往.{0,10}(左|右|上|下).{0,10}(移|移动|挪)|到.{0,10}(左|右|上|下).{0,10}(边|角|方))/i,
+  /(放大|缩小|变大|变小|大一点|小一点|缩放|扩大|缩窄)/i,
+  /(改成|改为|变成|变为|换成|设成|设置为|染成|涂成).{0,18}(红|红色|橙|橙色|黄|黄色|绿|绿色|蓝|蓝色|紫|紫色|黑|黑色|白|白色|灰|灰色|red|orange|yellow|green|blue|purple|black|white|gray)/i,
+  /(删除|删掉|移除|去掉|清除)/i,
+  /(画布|画板).{0,18}(调整|设置|设为|变大|变小|放大|缩小|变宽|变窄|变高|变矮|加宽|加高|空间)/i,
+]
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
@@ -151,6 +197,23 @@ function normalizeSafeLabel(value: unknown, maxLength = 32) {
 
 function normalizeIntentText(text: string) {
   return text.replace(/\s+/g, '').replace(/[，。！？、,.!?；;：:"“”'‘’（）()]/g, '')
+}
+
+function hasBatchStepIntent(text: string) {
+  return batchStepIntentPatterns.some((pattern) => pattern.test(text))
+}
+
+function requiresBatchCommand(sourceText: string) {
+  if (!multiStepConnectorPattern.test(sourceText)) {
+    return false
+  }
+
+  const clauses = sourceText
+    .split(multiStepSplitPattern)
+    .map((clause) => clause.trim())
+    .filter(Boolean)
+
+  return clauses.filter(hasBatchStepIntent).length >= 2
 }
 
 function requestsSemanticObject(sourceText: string, localCommand?: ParsedCommand) {
@@ -730,6 +793,14 @@ function validateTargetSelection(
   }
 
   if (normalizedTarget.mode === 'semantic' && semanticGroupCount !== 1) {
+    if (options.strictTargets) {
+      return {
+        status: 'invalid',
+        reason: 'ambiguous-target',
+        rawValue,
+      } satisfies CommandPlannerResult
+    }
+
     return null
   }
 
@@ -847,6 +918,445 @@ function shouldNormalizeMoveToSpatial(
   )
 }
 
+function isBatchStepCommand(command: ParsedCommand): command is BatchStepCommand {
+  return command.action !== 'unknown' && allowedBatchStepActions.has(command.action)
+}
+
+function getTargetIdsFromRawStep(value: Record<string, unknown>) {
+  const targets = [value.target, value.reference]
+
+  return targets.flatMap((target) =>
+    isRecord(target) && typeof target.id === 'string' ? [target.id] : [],
+  )
+}
+
+function recomputeValidationCanvas(
+  canvas: CommandPlannerInput['canvas'],
+): CommandPlannerInput['canvas'] {
+  return {
+    ...canvas,
+    semanticGroups: createSemanticGroupSummaries(canvas.objects, {
+      selectedId: canvas.selectedId,
+      selectedGroupId: canvas.selectedGroupId,
+    }),
+  }
+}
+
+function getValidationShapePosition(
+  position: CommandPosition | undefined,
+  canvas: Pick<CommandPlannerInput['canvas'], 'width' | 'height'>,
+  size: { width: number; height: number },
+) {
+  const anchor = validationPositionAnchors[position ?? 'center']
+
+  return {
+    x: Math.round(canvas.width * anchor.x - size.width / 2),
+    y: Math.round(canvas.height * anchor.y - size.height / 2),
+  }
+}
+
+function createValidationObjectFromCommand(
+  command: Extract<BatchStepCommand, { action: 'create' }>,
+  canvas: CommandPlannerInput['canvas'],
+): CommandPlannerInput['canvas']['objects'][number] {
+  const size = validationShapeSizes[command.shape]
+  const position = getValidationShapePosition(command.position, canvas, size)
+  const style = colorStyles[command.color ?? 'blue']
+  const index = canvas.objects.length + 1
+
+  return {
+    id: `batch-${command.shape}-${index}`,
+    type: command.shape,
+    x: position.x,
+    y: position.y,
+    width: size.width,
+    height: size.height,
+    fill: style.fill,
+    text: command.shape === 'text' ? command.text : undefined,
+  }
+}
+
+function canExpandValidationSemanticReference(target: CommandTarget) {
+  return (
+    !target.id &&
+    !target.shape &&
+    !target.color &&
+    !target.position &&
+    !target.partLabel
+  )
+}
+
+function getValidationObjectsByGroup(
+  canvas: CommandPlannerInput['canvas'],
+  groupId: string,
+  target: CommandTarget,
+) {
+  return canvas.objects.filter(
+    (object) =>
+      object.groupId === groupId &&
+      matchesTargetObject(object, target, canvas),
+  )
+}
+
+function selectValidationObjects(
+  canvas: CommandPlannerInput['canvas'],
+  target: CommandTarget,
+) {
+  const normalizedTarget = normalizeSemanticTargetReference(target, canvas)
+
+  if (
+    normalizedTarget.mode === 'selected' &&
+    canvas.selectedGroupId &&
+    canExpandValidationSemanticReference(normalizedTarget)
+  ) {
+    const groupObjects = getValidationObjectsByGroup(
+      canvas,
+      canvas.selectedGroupId,
+      normalizedTarget,
+    )
+
+    if (groupObjects.length > 0) {
+      return groupObjects
+    }
+  }
+
+  if (normalizedTarget.mode === 'selected') {
+    const selectedObject = canvas.objects.find(
+      (object) =>
+        object.id === canvas.selectedId &&
+        matchesTargetObject(object, normalizedTarget, canvas),
+    )
+
+    return selectedObject ? [selectedObject] : []
+  }
+
+  if (normalizedTarget.mode === 'last') {
+    const latestMatch = [...canvas.objects]
+      .reverse()
+      .find((object) => matchesTargetObject(object, normalizedTarget, canvas))
+
+    if (
+      latestMatch?.groupId &&
+      canExpandValidationSemanticReference(normalizedTarget)
+    ) {
+      return getValidationObjectsByGroup(canvas, latestMatch.groupId, normalizedTarget)
+    }
+
+    return latestMatch ? [latestMatch] : []
+  }
+
+  const matches = canvas.objects.filter((object) =>
+    matchesTargetObject(object, normalizedTarget, canvas),
+  )
+
+  if (normalizedTarget.mode !== 'semantic') {
+    return matches.length === 1 ? matches : []
+  }
+
+  if (!normalizedTarget.groupId && canvas.selectedGroupId) {
+    const selectedGroupMatches = matches.filter(
+      (object) => object.groupId === canvas.selectedGroupId,
+    )
+
+    if (selectedGroupMatches.length > 0) {
+      return selectedGroupMatches
+    }
+  }
+
+  const semanticKeys = new Set(matches.map(getSemanticGroupKey))
+
+  return semanticKeys.size === 1 ? matches : []
+}
+
+function getValidationBounds(objects: CommandPlannerInput['canvas']['objects']) {
+  const minX = Math.min(...objects.map((object) => object.x))
+  const minY = Math.min(...objects.map((object) => object.y))
+  const maxX = Math.max(...objects.map((object) => object.x + object.width))
+  const maxY = Math.max(...objects.map((object) => object.y + object.height))
+
+  return {
+    x: minX,
+    y: minY,
+    width: maxX - minX,
+    height: maxY - minY,
+  }
+}
+
+function getValidationSharedGroupId(
+  objects: CommandPlannerInput['canvas']['objects'],
+) {
+  const groupIds = new Set(
+    objects.flatMap((object) => (object.groupId ? [object.groupId] : [])),
+  )
+
+  return groupIds.size === 1 ? Array.from(groupIds)[0] : undefined
+}
+
+function updateValidationObjects(
+  canvas: CommandPlannerInput['canvas'],
+  targetObjects: CommandPlannerInput['canvas']['objects'],
+  updateObject: (
+    object: CommandPlannerInput['canvas']['objects'][number],
+  ) => CommandPlannerInput['canvas']['objects'][number],
+) {
+  if (targetObjects.length === 0) {
+    return canvas
+  }
+
+  const targetIds = new Set(targetObjects.map((object) => object.id))
+  const selectedId = targetObjects.at(-1)?.id
+  const selectedGroupId =
+    targetObjects.length > 1 ? getValidationSharedGroupId(targetObjects) : undefined
+
+  return recomputeValidationCanvas({
+    ...canvas,
+    selectedId,
+    selectedGroupId,
+    objects: canvas.objects.map((object) =>
+      targetIds.has(object.id) ? updateObject(object) : object,
+    ),
+  })
+}
+
+function getValidationSpatialDelta(
+  targetBounds: ReturnType<typeof getValidationBounds>,
+  referenceBounds: ReturnType<typeof getValidationBounds>,
+  command: Extract<BatchStepCommand, { action: 'move'; mode: 'spatial' }>,
+) {
+  const gap = Math.max(0, Math.min(command.gap ?? 24, 240))
+  const align = command.align ?? 'preserve'
+  const referenceCenterX = referenceBounds.x + referenceBounds.width / 2
+  const referenceCenterY = referenceBounds.y + referenceBounds.height / 2
+  let nextX = targetBounds.x
+  let nextY = targetBounds.y
+
+  if (command.relation === 'left-of') {
+    nextX = referenceBounds.x - targetBounds.width - gap
+    nextY =
+      align === 'preserve'
+        ? targetBounds.y
+        : align === 'start'
+          ? referenceBounds.y
+          : align === 'end'
+            ? referenceBounds.y + referenceBounds.height - targetBounds.height
+            : referenceCenterY - targetBounds.height / 2
+  }
+
+  if (command.relation === 'right-of') {
+    nextX = referenceBounds.x + referenceBounds.width + gap
+    nextY =
+      align === 'preserve'
+        ? targetBounds.y
+        : align === 'start'
+          ? referenceBounds.y
+          : align === 'end'
+            ? referenceBounds.y + referenceBounds.height - targetBounds.height
+            : referenceCenterY - targetBounds.height / 2
+  }
+
+  if (command.relation === 'above') {
+    nextY = referenceBounds.y - targetBounds.height - gap
+    nextX =
+      align === 'preserve'
+        ? targetBounds.x
+        : align === 'start'
+          ? referenceBounds.x
+          : align === 'end'
+            ? referenceBounds.x + referenceBounds.width - targetBounds.width
+            : referenceCenterX - targetBounds.width / 2
+  }
+
+  if (command.relation === 'below') {
+    nextY = referenceBounds.y + referenceBounds.height + gap
+    nextX =
+      align === 'preserve'
+        ? targetBounds.x
+        : align === 'start'
+          ? referenceBounds.x
+          : align === 'end'
+            ? referenceBounds.x + referenceBounds.width - targetBounds.width
+            : referenceCenterX - targetBounds.width / 2
+  }
+
+  return {
+    x: Math.round(nextX - targetBounds.x),
+    y: Math.round(nextY - targetBounds.y),
+  }
+}
+
+function applyValidationMoveCommand(
+  canvas: CommandPlannerInput['canvas'],
+  command: Extract<BatchStepCommand, { action: 'move' }>,
+) {
+  const targetObjects = selectValidationObjects(canvas, command.target)
+
+  if (targetObjects.length === 0) {
+    return canvas
+  }
+
+  const bounds = getValidationBounds(targetObjects)
+  let delta: { x: number; y: number }
+
+  if (command.mode === 'relative') {
+    const distance = command.distance ?? 48
+    delta = {
+      x: command.direction === 'left' ? -distance : command.direction === 'right' ? distance : 0,
+      y: command.direction === 'up' ? -distance : command.direction === 'down' ? distance : 0,
+    }
+  } else if (command.mode === 'spatial') {
+    const referenceObjects = selectValidationObjects(canvas, command.reference)
+
+    if (referenceObjects.length === 0) {
+      return canvas
+    }
+
+    delta = getValidationSpatialDelta(
+      bounds,
+      getValidationBounds(referenceObjects),
+      command,
+    )
+  } else {
+    const position = getValidationShapePosition(command.position, canvas, bounds)
+    delta = {
+      x: position.x - bounds.x,
+      y: position.y - bounds.y,
+    }
+  }
+
+  return updateValidationObjects(canvas, targetObjects, (object) => ({
+    ...object,
+    x: object.x + delta.x,
+    y: object.y + delta.y,
+  }))
+}
+
+function applyValidationResizeCanvasCommand(
+  canvas: CommandPlannerInput['canvas'],
+  command: Extract<BatchStepCommand, { action: 'resizeCanvas' }>,
+) {
+  const nextSize =
+    command.mode === 'absolute'
+      ? {
+          width: command.width,
+          height: command.height,
+        }
+      : {
+          width:
+            command.direction === 'wider' || command.direction === 'larger'
+              ? canvas.width + (command.amount ?? 120)
+              : command.direction === 'narrower' || command.direction === 'smaller'
+                ? canvas.width - (command.amount ?? 120)
+                : canvas.width,
+          height:
+            command.direction === 'taller' || command.direction === 'larger'
+              ? canvas.height + (command.amount ?? 120)
+              : command.direction === 'shorter' || command.direction === 'smaller'
+                ? canvas.height - (command.amount ?? 120)
+                : canvas.height,
+        }
+  const width = Math.max(320, Math.min(2400, Math.round(nextSize.width)))
+  const height = Math.max(320, Math.min(2400, Math.round(nextSize.height)))
+  const widthDelta = width - canvas.width
+  const heightDelta = height - canvas.height
+  const anchor = command.anchor ?? 'center'
+  const offsetX = anchor.includes('left')
+    ? widthDelta
+    : anchor.includes('right')
+      ? 0
+      : Math.round(widthDelta / 2)
+  const offsetY = anchor.includes('top')
+    ? heightDelta
+    : anchor.includes('bottom')
+      ? 0
+      : Math.round(heightDelta / 2)
+
+  return recomputeValidationCanvas({
+    ...canvas,
+    width,
+    height,
+    objects: canvas.objects.map((object) => ({
+      ...object,
+      x: object.x + offsetX,
+      y: object.y + offsetY,
+    })),
+  })
+}
+
+function applyValidationBatchStep(
+  canvas: CommandPlannerInput['canvas'],
+  command: BatchStepCommand,
+): CommandPlannerInput['canvas'] {
+  if (command.action === 'create') {
+    const object = createValidationObjectFromCommand(command, canvas)
+
+    return recomputeValidationCanvas({
+      ...canvas,
+      selectedId: object.id,
+      selectedGroupId: undefined,
+      objects: [...canvas.objects, object],
+    })
+  }
+
+  if (command.action === 'move') {
+    return applyValidationMoveCommand(canvas, command)
+  }
+
+  if (command.action === 'recolor') {
+    const targetObjects = selectValidationObjects(canvas, command.target)
+    const style = colorStyles[command.color]
+
+    return updateValidationObjects(canvas, targetObjects, (object) => ({
+      ...object,
+      fill: style.fill,
+    }))
+  }
+
+  if (command.action === 'resize') {
+    const targetObjects = selectValidationObjects(canvas, command.target)
+
+    if (targetObjects.length === 0) {
+      return canvas
+    }
+
+    const bounds = getValidationBounds(targetObjects)
+    const scale = command.direction === 'larger' ? 1.2 : 0.82
+    const centerX = bounds.x + bounds.width / 2
+    const centerY = bounds.y + bounds.height / 2
+
+    return updateValidationObjects(canvas, targetObjects, (object) => {
+      const objectCenterX = object.x + object.width / 2
+      const objectCenterY = object.y + object.height / 2
+      const width = Math.max(12, Math.round(object.width * scale))
+      const height =
+        object.type === 'line'
+          ? Math.round(object.height * scale)
+          : Math.max(12, Math.round(object.height * scale))
+
+      return {
+        ...object,
+        width,
+        height,
+        x: Math.round(centerX + (objectCenterX - centerX) * scale - width / 2),
+        y: Math.round(centerY + (objectCenterY - centerY) * scale - height / 2),
+      }
+    })
+  }
+
+  if (command.action === 'delete') {
+    const targetObjects = selectValidationObjects(canvas, command.target)
+    const targetIds = new Set(targetObjects.map((object) => object.id))
+
+    return recomputeValidationCanvas({
+      ...canvas,
+      selectedId: undefined,
+      selectedGroupId: undefined,
+      objects: canvas.objects.filter((object) => !targetIds.has(object.id)),
+    })
+  }
+
+  return applyValidationResizeCanvasCommand(canvas, command)
+}
+
 export function validatePlannedCommand(
   rawValue: unknown,
   options: ValidatorOptions = {},
@@ -893,6 +1403,158 @@ export function validatePlannedCommand(
         typeof rawValue.reason === 'string' ? rawValue.reason : 'unsupported-action',
       rawValue,
     }
+  }
+
+  if (
+    (options.batchDepth ?? 0) === 0 &&
+    !needsIncrementalSceneObject &&
+    requiresBatchCommand(effectiveSourceText) &&
+    rawValue.action !== 'batch'
+  ) {
+    return {
+      status: 'invalid',
+      reason: 'multi-step-command-requires-batch',
+      rawValue,
+    }
+  }
+
+  if (rawValue.action === 'batch') {
+    if ((options.batchDepth ?? 0) > 0) {
+      return {
+        status: 'invalid',
+        reason: 'nested-batch-command',
+        rawValue,
+      }
+    }
+
+    if (needsIncrementalSceneObject) {
+      return {
+        status: 'invalid',
+        reason: 'incremental-addition-requires-add-scene-object',
+        rawValue,
+      }
+    }
+
+    if (isMissingRelativeAnchor) {
+      return {
+        status: 'invalid',
+        reason: 'missing-anchor',
+        rawValue: {
+          action: rawValue.action,
+          sourceText,
+          anchorLabel: relativeAdditionIntent?.anchorLabel,
+          objectLabel: relativeAdditionIntent?.objectLabel,
+          relation: relativeAdditionIntent?.relation,
+          originalValue: rawValue,
+        },
+      }
+    }
+
+    if (!options.canvas) {
+      return {
+        status: 'invalid',
+        reason: 'missing-canvas-context',
+        rawValue,
+      }
+    }
+
+    if (!Array.isArray(rawValue.commands)) {
+      return {
+        status: 'invalid',
+        reason: 'invalid-batch-commands',
+        rawValue,
+      }
+    }
+
+    if (
+      rawValue.commands.length < 2 ||
+      rawValue.commands.length > maxBatchCommandCount
+    ) {
+      return {
+        status: 'invalid',
+        reason: 'invalid-batch-command-count',
+        rawValue,
+      }
+    }
+
+    let validationCanvas = recomputeValidationCanvas(options.canvas)
+    const executableObjectIds = new Set(
+      validationCanvas.objects.map((object) => object.id),
+    )
+    const commands: BatchStepCommand[] = []
+
+    for (const [index, stepValue] of rawValue.commands.entries()) {
+      if (
+        !isRecord(stepValue) ||
+        typeof stepValue.action !== 'string' ||
+        !allowedBatchStepActions.has(stepValue.action)
+      ) {
+        return {
+          status: 'invalid',
+          reason: 'unsupported-batch-step',
+          rawValue: {
+            index,
+            step: stepValue,
+            originalValue: rawValue,
+          },
+        }
+      }
+
+      const referencesNonExecutableId = getTargetIdsFromRawStep(stepValue).some(
+        (id) => !executableObjectIds.has(id),
+      )
+
+      if (referencesNonExecutableId) {
+        return {
+          status: 'invalid',
+          reason: 'invalid-batch-step-transient-id',
+          rawValue: {
+            index,
+            step: stepValue,
+            originalValue: rawValue,
+          },
+        }
+      }
+
+      const stepResult = validatePlannedCommand(stepValue, {
+        ...options,
+        canvas: validationCanvas,
+        sourceText:
+          typeof stepValue.sourceText === 'string'
+            ? stepValue.sourceText
+            : effectiveSourceText,
+        strictTargets: true,
+        batchDepth: (options.batchDepth ?? 0) + 1,
+      })
+
+      if (stepResult.status !== 'planned' || !isBatchStepCommand(stepResult.command)) {
+        return {
+          status: 'invalid',
+          reason:
+            stepResult.status === 'invalid'
+              ? `invalid-batch-step-${stepResult.reason}`
+              : 'invalid-batch-step',
+          rawValue: {
+            index,
+            step: stepValue,
+            result: stepResult,
+            originalValue: rawValue,
+          },
+        }
+      }
+
+      commands.push(stepResult.command)
+      validationCanvas = applyValidationBatchStep(validationCanvas, stepResult.command)
+    }
+
+    return createPlannedResult(
+      {
+        action: 'batch',
+        sourceText,
+        commands,
+      },
+      correction,
+    )
   }
 
   if (

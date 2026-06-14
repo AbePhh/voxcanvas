@@ -24,6 +24,16 @@
   color: #991b1b;
 }
 
+.planner-preview__steps {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding-left: 20px;
+  color: #78350f;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .planner-preview__correction {
   display: grid;
   gap: 6px;
