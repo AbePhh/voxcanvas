@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { FormEvent } from 'react'
 import { useVoiceInput } from './useVoiceInput'
+import { extractWakeCommand } from './wakeWord'
 import { createTargetFeedback } from '../canvas/targetDescriptions'
 import {
   createPendingClarification,
@@ -61,6 +61,8 @@ const sceneRelations = new Set<SceneRelation>([
   'around',
 ])
 
+const FOLLOW_UP_COMMAND_WINDOW_MS = 8000
+
 function createPendingMissingAnchorFromPlannerResult(
   rawValue: unknown,
   sourceText: string,
@@ -100,21 +102,28 @@ export function VoiceInputPanel({
     errorMessage,
     interimTranscript,
     isListening,
-    resetTranscript,
-    startListening,
-    stopListening,
     supportStatus,
     transcript,
+    transcriptId,
   } = useVoiceInput()
 
-  const [textCommand, setTextCommand] = useState('')
+  const [activeCommandText, setActiveCommandText] = useState('')
+  const [wakeMode, setWakeMode] = useState<'waiting' | 'armed'>('waiting')
   const hasTranscript = transcript || interimTranscript
-  const previewText = transcript || interimTranscript || textCommand
+  const interimWakeCommand = useMemo(
+    () => (interimTranscript ? extractWakeCommand(interimTranscript) : null),
+    [interimTranscript],
+  )
+  const previewText =
+    activeCommandText ||
+    (interimWakeCommand?.status === 'command' ? interimWakeCommand.commandText : '')
   const parsedCommand = useMemo(
     () => (previewText ? parseCommand(previewText) : null),
     [previewText],
   )
-  const lastExecutedTranscriptRef = useRef('')
+  const lastProcessedTranscriptIdRef = useRef(0)
+  const followUpUntilRef = useRef(0)
+  const followUpTimerRef = useRef<number | null>(null)
   const [clarificationFeedback, setClarificationFeedback] = useState<ReturnType<
     typeof createTargetFeedback
   > | null>(null)
@@ -139,12 +148,38 @@ export function VoiceInputPanel({
     setPendingMissingAnchor(null)
   }, [])
 
+  const clearFollowUpTimer = useCallback(() => {
+    if (followUpTimerRef.current !== null) {
+      window.clearTimeout(followUpTimerRef.current)
+      followUpTimerRef.current = null
+    }
+  }, [])
+
+  const armFollowUpCommand = useCallback(() => {
+    clearFollowUpTimer()
+    followUpUntilRef.current = Date.now() + FOLLOW_UP_COMMAND_WINDOW_MS
+    setWakeMode('armed')
+
+    followUpTimerRef.current = window.setTimeout(() => {
+      followUpTimerRef.current = null
+      followUpUntilRef.current = 0
+      setWakeMode('waiting')
+    }, FOLLOW_UP_COMMAND_WINDOW_MS)
+  }, [clearFollowUpTimer])
+
+  const clearFollowUpCommand = useCallback(() => {
+    clearFollowUpTimer()
+    followUpUntilRef.current = 0
+    setWakeMode('waiting')
+  }, [clearFollowUpTimer])
+
   useEffect(() => {
     if (isListening) {
-      lastExecutedTranscriptRef.current = ''
       resetPlanner()
     }
   }, [isListening, resetPlanner])
+
+  useEffect(() => () => clearFollowUpTimer(), [clearFollowUpTimer])
 
   const processCommandText = useCallback((commandText: string) => {
     if (isCancellationIntent(commandText)) {
@@ -417,83 +452,80 @@ export function VoiceInputPanel({
   }, [processCommandText])
 
   useEffect(() => {
-    if (!transcript || transcript === lastExecutedTranscriptRef.current) {
+    if (!transcript || transcriptId <= lastProcessedTranscriptIdRef.current) {
       return
     }
 
-    lastExecutedTranscriptRef.current = transcript
+    lastProcessedTranscriptIdRef.current = transcriptId
 
-    void processCommandText(transcript)
-  }, [
-    processCommandText,
-    transcript,
-  ])
+    const wakeCommand = extractWakeCommand(transcript)
 
-  const handleTextCommandSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
+    if (wakeCommand.status === 'wake-only') {
+      queueMicrotask(() => {
+        setActiveCommandText('')
+        armFollowUpCommand()
+      })
+      return
+    }
 
-    const commandText = textCommand.trim()
+    const isArmedFollowUp = Date.now() <= followUpUntilRef.current
+    const commandText =
+      wakeCommand.status === 'command'
+        ? wakeCommand.commandText
+        : isArmedFollowUp
+          ? transcript.trim()
+          : ''
 
     if (!commandText) {
       return
     }
 
-    resetPlanner()
-    void processCommandText(commandText)
-  }
-
-  const handleClear = () => {
-    resetTranscript()
-    setTextCommand('')
-    resetPendingInteraction()
-    setLocalExecutionFeedback(null)
-  }
+    queueMicrotask(() => {
+      clearFollowUpCommand()
+      setActiveCommandText(commandText)
+      resetPlanner()
+      void processCommandText(commandText)
+    })
+  }, [
+    armFollowUpCommand,
+    clearFollowUpCommand,
+    processCommandText,
+    resetPlanner,
+    transcript,
+    transcriptId,
+  ])
 
   return (
     <section className="voice-panel" aria-label="Voice input">
       <div className="voice-panel__header">
         <div>
           <h2>Voice Input</h2>
-          <p>{isListening ? 'Listening for a drawing command' : 'Ready for speech'}</p>
+          <p>
+            {supportStatus === 'unsupported'
+              ? 'Speech recognition unavailable'
+              : wakeMode === 'armed'
+                ? 'Wake phrase heard'
+                : isListening
+                  ? 'Waiting for 智能绘图'
+                  : 'Requesting microphone permission'}
+          </p>
         </div>
         <span className={isListening ? 'voice-status is-active' : 'voice-status'}>
           {isListening ? 'Live' : 'Idle'}
         </span>
       </div>
 
-      <div className="voice-actions">
-        <button
-          type="button"
-          className="primary-action"
-          disabled={supportStatus === 'unsupported' || isListening}
-          onClick={startListening}
-        >
-          Start listening
-        </button>
-        <button type="button" disabled={!isListening} onClick={stopListening}>
-          Stop
-        </button>
-        <button
-          type="button"
-          disabled={!hasTranscript && !textCommand && !clarificationFeedback}
-          onClick={handleClear}
-        >
-          Clear
-        </button>
+      <div className={wakeMode === 'armed' ? 'wake-card is-armed' : 'wake-card'}>
+        <div>
+          <span>Wake phrase</span>
+          <strong>智能绘图</strong>
+        </div>
+        <p>
+          {wakeMode === 'armed'
+            ? 'Ready for the next spoken command.'
+            : 'Only speech after the wake phrase will run.'}
+        </p>
       </div>
-
-      <form className="text-command-form" onSubmit={handleTextCommandSubmit}>
-        <input
-          type="text"
-          value={textCommand}
-          onChange={(event) => setTextCommand(event.target.value)}
-          placeholder="Type a command when the microphone is unavailable."
-          aria-label="Typed drawing command"
-        />
-        <button type="submit" disabled={!textCommand.trim() || isPlanning}>
-          Run
-        </button>
-      </form>
 
       <div className="transcript-box" aria-live="polite">
         {hasTranscript ? (
@@ -502,7 +534,7 @@ export function VoiceInputPanel({
             {interimTranscript ? <p className="interim">{interimTranscript}</p> : null}
           </>
         ) : (
-          <p className="placeholder">Speech recognition output will appear here.</p>
+          <p className="placeholder">Waiting for microphone input.</p>
         )}
       </div>
 
