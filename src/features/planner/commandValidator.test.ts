@@ -980,6 +980,373 @@ describe('validatePlannedCommand', () => {
     })
   })
 
+  it('accepts spatial move commands with a semantic reference target', () => {
+    const canvasWithSceneObjects = {
+      ...canvasWithOneCircle,
+      objects: [
+        {
+          id: 'tree-trunk',
+          type: 'rect' as const,
+          x: 650,
+          y: 330,
+          width: 50,
+          height: 150,
+          fill: '#f97316',
+          text: undefined,
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树干',
+        },
+        {
+          id: 'tree-crown',
+          type: 'circle' as const,
+          x: 610,
+          y: 230,
+          width: 150,
+          height: 150,
+          fill: '#22c55e',
+          text: undefined,
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树冠',
+        },
+        {
+          id: 'house-wall',
+          type: 'rect' as const,
+          x: 260,
+          y: 300,
+          width: 260,
+          height: 150,
+          fill: '#f97316',
+          text: undefined,
+          groupId: 'house-1',
+          groupLabel: '房子',
+          partLabel: '墙体',
+        },
+      ],
+    }
+
+    const result = validatePlannedCommand(
+      {
+        action: 'move',
+        target: { mode: 'semantic', groupLabel: '树' },
+        mode: 'spatial',
+        reference: { mode: 'semantic', groupLabel: '房子' },
+        relation: 'right-of',
+        align: 'center',
+        gap: 24,
+        sourceText: '把树放到房子右边',
+      },
+      { canvas: canvasWithSceneObjects },
+    )
+
+    expect(result).toMatchObject({
+      status: 'planned',
+      command: {
+        action: 'move',
+        mode: 'spatial',
+        reference: {
+          mode: 'semantic',
+          groupLabel: '房子',
+        },
+        relation: 'right-of',
+        align: 'preserve',
+        gap: 24,
+      },
+    })
+  })
+
+  it('rejects spatial move commands when the reference object is missing', () => {
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'move',
+          target: { mode: 'shape', shape: 'circle' },
+          mode: 'spatial',
+          reference: { mode: 'semantic', groupLabel: '房子' },
+          relation: 'right-of',
+        },
+        { canvas: canvasWithOneCircle },
+      ),
+    ).toMatchObject({
+      status: 'invalid',
+      reason: 'reference-not-found',
+    })
+  })
+
+  it('normalizes misplaced part-level absolute moves into whole-group spatial moves', () => {
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'move',
+          target: {
+            mode: 'semantic',
+            groupLabel: '树',
+            partLabel: '树冠',
+          },
+          mode: 'absolute',
+          position: 'bottom',
+          sourceText: '把这颗树移动到地面的上方',
+        },
+        {
+          canvas: {
+            ...canvasWithOneCircle,
+            objects: [
+              {
+                id: 'ground',
+                type: 'line',
+                x: 120,
+                y: 460,
+                width: 720,
+                height: 0,
+                fill: 'transparent',
+                text: undefined,
+                groupId: 'ground-1',
+                groupLabel: '地面',
+                partLabel: '地平线',
+              },
+              {
+                id: 'tree-trunk',
+                type: 'rect',
+                x: 210,
+                y: 350,
+                width: 44,
+                height: 100,
+                fill: '#f97316',
+                text: undefined,
+                groupId: 'tree-1',
+                groupLabel: '树',
+                partLabel: '树干',
+              },
+              {
+                id: 'tree-crown',
+                type: 'circle',
+                x: 165,
+                y: 250,
+                width: 134,
+                height: 134,
+                fill: '#22c55e',
+                text: undefined,
+                groupId: 'tree-1',
+                groupLabel: '树',
+                partLabel: '树冠',
+              },
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({
+      status: 'planned',
+      command: {
+        action: 'move',
+        target: {
+          mode: 'semantic',
+          groupLabel: '树',
+          partLabel: undefined,
+        },
+        mode: 'spatial',
+        reference: {
+          mode: 'semantic',
+          groupLabel: '地面',
+        },
+        relation: 'above',
+        align: 'preserve',
+        gap: 0,
+      },
+    })
+  })
+
+  it('normalizes misplaced part-level relative moves into whole-group moves', () => {
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'move',
+          target: {
+            mode: 'semantic',
+            groupLabel: '树',
+            partLabel: '树冠',
+          },
+          mode: 'relative',
+          direction: 'right',
+          distance: 48,
+          sourceText: '把这棵树往右边移动一点',
+        },
+        {
+          canvas: {
+            ...canvasWithOneCircle,
+            objects: [
+              {
+                id: 'tree-trunk',
+                type: 'rect',
+                x: 210,
+                y: 350,
+                width: 44,
+                height: 100,
+                fill: '#f97316',
+                text: undefined,
+                groupId: 'tree-1',
+                groupLabel: '树',
+                partLabel: '树干',
+              },
+              {
+                id: 'tree-crown',
+                type: 'circle',
+                x: 165,
+                y: 250,
+                width: 134,
+                height: 134,
+                fill: '#22c55e',
+                text: undefined,
+                groupId: 'tree-1',
+                groupLabel: '树',
+                partLabel: '树冠',
+              },
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({
+      status: 'planned',
+      command: {
+        action: 'move',
+        target: {
+          mode: 'semantic',
+          groupLabel: '树',
+          partLabel: undefined,
+        },
+        mode: 'relative',
+        direction: 'right',
+        distance: 48,
+      },
+    })
+  })
+
+  it('normalizes misplaced part labels for any semantic object-level move', () => {
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'move',
+          target: {
+            mode: 'semantic',
+            groupLabel: '房子',
+            partLabel: '墙体',
+          },
+          mode: 'relative',
+          direction: 'right',
+          distance: 48,
+          sourceText: '把房子往右移动一点',
+        },
+        {
+          canvas: {
+            ...canvasWithOneCircle,
+            objects: [
+              {
+                id: 'house-wall',
+                type: 'rect',
+                x: 260,
+                y: 300,
+                width: 260,
+                height: 150,
+                fill: '#f97316',
+                text: undefined,
+                groupId: 'house-1',
+                groupLabel: '房子',
+                partLabel: '墙体',
+              },
+              {
+                id: 'house-roof',
+                type: 'triangle',
+                x: 230,
+                y: 210,
+                width: 320,
+                height: 120,
+                fill: '#ef4444',
+                text: undefined,
+                groupId: 'house-1',
+                groupLabel: '房子',
+                partLabel: '屋顶',
+              },
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({
+      status: 'planned',
+      command: {
+        action: 'move',
+        target: {
+          mode: 'semantic',
+          groupLabel: '房子',
+          partLabel: undefined,
+        },
+        mode: 'relative',
+        direction: 'right',
+        distance: 48,
+      },
+    })
+  })
+
+  it('keeps explicit semantic part targets when the user names the part', () => {
+    expect(
+      validatePlannedCommand(
+        {
+          action: 'move',
+          target: {
+            mode: 'semantic',
+            groupLabel: '房子',
+            partLabel: '屋顶',
+          },
+          mode: 'relative',
+          direction: 'right',
+          distance: 48,
+          sourceText: '把房子的屋顶往右移动一点',
+        },
+        {
+          canvas: {
+            ...canvasWithOneCircle,
+            objects: [
+              {
+                id: 'house-wall',
+                type: 'rect',
+                x: 260,
+                y: 300,
+                width: 260,
+                height: 150,
+                fill: '#f97316',
+                text: undefined,
+                groupId: 'house-1',
+                groupLabel: '房子',
+                partLabel: '墙体',
+              },
+              {
+                id: 'house-roof',
+                type: 'triangle',
+                x: 230,
+                y: 210,
+                width: 320,
+                height: 120,
+                fill: '#ef4444',
+                text: undefined,
+                groupId: 'house-1',
+                groupLabel: '房子',
+                partLabel: '屋顶',
+              },
+            ],
+          },
+        },
+      ),
+    ).toMatchObject({
+      status: 'planned',
+      command: {
+        target: {
+          mode: 'semantic',
+          groupLabel: '房子',
+          partLabel: '屋顶',
+        },
+      },
+    })
+  })
+
   it('allows ambiguous semantic scene targets so the UI can clarify them', () => {
     expect(
       validatePlannedCommand(

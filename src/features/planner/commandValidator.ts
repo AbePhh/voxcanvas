@@ -11,6 +11,8 @@ import type {
   SceneElement,
   SceneObjectAnchor,
   SceneRelation,
+  SpatialMoveAlignment,
+  SpatialMoveRelation,
 } from '../commands/types'
 import { matchesCommandColor } from '../canvas/colorStyles'
 import { getSceneSpace, sceneGraphLimits } from '../canvas/sceneGraph'
@@ -24,6 +26,7 @@ import {
   detectRelativeAdditionIntent,
   findAnchorReferenceGroups,
 } from '../commands/relativeAnchorIntent'
+import { detectSpatialMoveIntent } from '../commands/spatialMoveIntent'
 
 const allowedActions = new Set([
   'create',
@@ -71,8 +74,20 @@ const allowedTargetModes = new Set([
   'any',
   'semantic',
 ])
-const allowedMoveModes = new Set(['absolute', 'relative'])
+const allowedMoveModes = new Set(['absolute', 'relative', 'spatial'])
 const allowedMoveDirections = new Set(['left', 'right', 'up', 'down'])
+const allowedSpatialMoveRelations = new Set<SpatialMoveRelation>([
+  'left-of',
+  'right-of',
+  'above',
+  'below',
+])
+const allowedSpatialMoveAlignments = new Set<SpatialMoveAlignment>([
+  'preserve',
+  'center',
+  'start',
+  'end',
+])
 const allowedResizeDirections = new Set(['larger', 'smaller'])
 const allowedCanvasResizeDirections = new Set<CanvasResizeDirection>([
   'larger',
@@ -113,7 +128,7 @@ const explicitPrimitiveShapePattern =
   /圆形|圆圈|圆|矩形|长方形|正方形|方块|三角形|三角|线条|直线|文本|文字|文本框/
 const createIntentPattern = /画|绘制|创建|添加|生成|新增|加|放|插入/
 const incrementalAdditionPattern =
-  /再|再来|添加|新增|加一|加个|加一个|放一|放个|放一个|插入|右边|左边|旁边|附近|上面|下面|周围/
+  /再|再来|添加|新增|插入|创建|生成|加上|加一|加个|加一个|加只|加棵|加朵|加辆|加座|加条|加片|加颗|加块|加束|加艘|加台|放一|放个|放一个|放只|放棵|放朵|放辆|放座|放条|放片|放颗|放块|放束|放艘|放台/
 const wholeSceneResetPattern = /重新|重画|整个|完整|从头|新场景|全新场景/
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -460,6 +475,18 @@ function isCanvasResizeDirection(value: unknown): value is CanvasResizeDirection
   )
 }
 
+function normalizeSpatialMoveGap(value: unknown) {
+  if (value === undefined) {
+    return undefined
+  }
+
+  if (!isFiniteNumber(value)) {
+    return null
+  }
+
+  return Math.max(0, Math.min(Math.round(value), 240))
+}
+
 function normalizeCanvasResizeAnchor(value: unknown): CanvasResizeAnchor | undefined {
   if (value === undefined) {
     return undefined
@@ -732,6 +759,94 @@ function normalizeEditableTarget(
   return normalizeSemanticTargetReference(target, options.canvas)
 }
 
+function normalizeComparableText(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/[，。！？、,.!?；;：:"“”'‘’（）()[\]{}]/g, '')
+    .trim()
+}
+
+function targetMatchesIntentLabel(target: CommandTarget, label: string | undefined) {
+  if (!label) {
+    return true
+  }
+
+  const normalizedLabel = normalizeComparableText(label)
+
+  if (!normalizedLabel) {
+    return true
+  }
+
+  const targetLabels = [target.groupLabel, target.groupId, target.partLabel]
+    .filter((value): value is string => Boolean(value))
+    .map(normalizeComparableText)
+
+  return targetLabels.some(
+    (targetLabel) =>
+      targetLabel === normalizedLabel ||
+      targetLabel.includes(normalizedLabel) ||
+      normalizedLabel.includes(targetLabel),
+  )
+}
+
+function shouldPreserveSemanticPartTarget(
+  target: CommandTarget,
+  sourceText: string,
+) {
+  if (target.mode !== 'semantic' || !target.groupLabel || !target.partLabel) {
+    return true
+  }
+
+  const normalizedSource = normalizeComparableText(sourceText)
+  const normalizedGroupLabel = normalizeComparableText(target.groupLabel)
+  const normalizedPartLabel = normalizeComparableText(target.partLabel)
+
+  if (!normalizedSource || !normalizedGroupLabel || !normalizedPartLabel) {
+    return true
+  }
+
+  return (
+    normalizedSource.includes(normalizedPartLabel) &&
+    normalizedPartLabel !== normalizedGroupLabel
+  )
+}
+
+function normalizeImplicitWholeSemanticTarget(
+  target: CommandTarget,
+  sourceText: string,
+) {
+  return shouldPreserveSemanticPartTarget(target, sourceText)
+    ? target
+    : {
+        ...target,
+        partLabel: undefined,
+      }
+}
+
+function normalizeEditableTargetForSource(
+  target: CommandTarget,
+  options: ValidatorOptions,
+  sourceText: string,
+) {
+  return normalizeEditableTarget(
+    normalizeImplicitWholeSemanticTarget(target, sourceText),
+    options,
+  )
+}
+
+function shouldNormalizeMoveToSpatial(
+  rawValue: Record<string, unknown>,
+  target: CommandTarget,
+  intent: ReturnType<typeof detectSpatialMoveIntent>,
+) {
+  return (
+    Boolean(intent) &&
+    rawValue.mode !== 'spatial' &&
+    targetMatchesIntentLabel(target, intent?.targetLabel)
+  )
+}
+
 export function validatePlannedCommand(
   rawValue: unknown,
   options: ValidatorOptions = {},
@@ -769,6 +884,7 @@ export function validatePlannedCommand(
     : []
   const isMissingRelativeAnchor =
     Boolean(relativeAdditionIntent && options.canvas) && matchingAnchorGroups.length === 0
+  const spatialMoveIntent = detectSpatialMoveIntent(effectiveSourceText)
 
   if (rawValue.action === 'unknown') {
     return {
@@ -1056,6 +1172,51 @@ export function validatePlannedCommand(
       return targetError
     }
 
+    if (shouldNormalizeMoveToSpatial(rawValue, target, spatialMoveIntent)) {
+      const reference = normalizeTarget({
+        mode: 'semantic',
+        groupLabel: spatialMoveIntent?.referenceLabel,
+      })
+
+      if (!reference || !spatialMoveIntent) {
+        return {
+          status: 'invalid',
+          reason: 'invalid-move-reference',
+          rawValue,
+        }
+      }
+
+      const referenceError = validateTargetSelection(reference, rawValue, options, {
+        allowGroup: reference.mode === 'semantic' && !reference.id,
+      })
+
+      if (referenceError) {
+        return {
+          ...referenceError,
+          reason:
+            referenceError.reason === 'target-not-found'
+              ? 'reference-not-found'
+              : referenceError.reason === 'ambiguous-target'
+                ? 'ambiguous-reference'
+                : referenceError.reason,
+        }
+      }
+
+      return createPlannedResult(
+        {
+          action: 'move',
+          target: normalizeEditableTargetForSource(target, options, sourceText),
+          mode: 'spatial',
+          reference: normalizeEditableTarget(reference, options),
+          relation: spatialMoveIntent.relation,
+          align: spatialMoveIntent.align,
+          gap: spatialMoveIntent.gap,
+          sourceText,
+        },
+        correction,
+      )
+    }
+
     if (!allowedMoveModes.has(rawValue.mode as string)) {
       return {
         status: 'invalid',
@@ -1076,9 +1237,83 @@ export function validatePlannedCommand(
       return createPlannedResult(
         {
           action: 'move',
-          target: normalizeEditableTarget(target, options),
+          target: normalizeEditableTargetForSource(target, options, sourceText),
           mode: 'absolute',
           position: rawValue.position as CommandPosition,
+          sourceText,
+        },
+        correction,
+      )
+    }
+
+    if (rawValue.mode === 'spatial') {
+      const reference = normalizeTarget(rawValue.reference)
+
+      if (!reference) {
+        return {
+          status: 'invalid',
+          reason: 'invalid-move-reference',
+          rawValue,
+        }
+      }
+
+      const referenceError = validateTargetSelection(reference, rawValue, options, {
+        allowGroup: reference.mode === 'semantic' && !reference.id,
+      })
+
+      if (referenceError) {
+        return {
+          ...referenceError,
+          reason:
+            referenceError.reason === 'target-not-found'
+              ? 'reference-not-found'
+              : referenceError.reason === 'ambiguous-target'
+                ? 'ambiguous-reference'
+                : referenceError.reason,
+        }
+      }
+
+      if (!allowedSpatialMoveRelations.has(rawValue.relation as SpatialMoveRelation)) {
+        return {
+          status: 'invalid',
+          reason: 'invalid-move-relation',
+          rawValue,
+        }
+      }
+
+      const align =
+        rawValue.align === undefined
+          ? undefined
+          : allowedSpatialMoveAlignments.has(rawValue.align as SpatialMoveAlignment)
+            ? (rawValue.align as SpatialMoveAlignment)
+            : null
+      const gap = normalizeSpatialMoveGap(rawValue.gap)
+
+      if (align === null) {
+        return {
+          status: 'invalid',
+          reason: 'invalid-move-alignment',
+          rawValue,
+        }
+      }
+
+      if (gap === null) {
+        return {
+          status: 'invalid',
+          reason: 'invalid-move-gap',
+          rawValue,
+        }
+      }
+
+      return createPlannedResult(
+        {
+          action: 'move',
+          target: normalizeEditableTargetForSource(target, options, sourceText),
+          mode: 'spatial',
+          reference: normalizeEditableTarget(reference, options),
+          relation: spatialMoveIntent?.relation ?? (rawValue.relation as SpatialMoveRelation),
+          align: spatialMoveIntent?.align ?? align,
+          gap: spatialMoveIntent?.gap ?? gap,
           sourceText,
         },
         correction,
@@ -1096,7 +1331,7 @@ export function validatePlannedCommand(
     return createPlannedResult(
       {
         action: 'move',
-        target: normalizeEditableTarget(target, options),
+        target: normalizeEditableTargetForSource(target, options, sourceText),
         mode: 'relative',
         direction: rawValue.direction as 'left' | 'right' | 'up' | 'down',
         distance: typeof rawValue.distance === 'number' ? rawValue.distance : 48,

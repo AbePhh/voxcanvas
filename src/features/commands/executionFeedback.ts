@@ -387,7 +387,9 @@ function createMoveFeedback(
   const fromPosition = getCanvasPositionLabel(beforeBounds, before)
   const toPosition = getCanvasPositionLabel(afterBounds, after)
   const summary =
-    command.mode === 'relative'
+    command.mode === 'spatial'
+      ? `已将${targetText}按参照物关系移动，从画布${fromPosition}到${toPosition}。`
+      : command.mode === 'relative'
       ? `已将${targetText}移动 ${formatPixels(distance)}，从画布${fromPosition}到${toPosition}。`
       : `已将${targetText}移动到画布${toPosition}。`
 

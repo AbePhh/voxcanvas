@@ -115,6 +115,61 @@ describe('clarification', () => {
     })
   })
 
+  it('can clarify the reference target of a spatial move command', () => {
+    const pending = createPendingClarification(
+      {
+        action: 'move',
+        target: {
+          mode: 'semantic',
+          groupLabel: '树',
+        },
+        mode: 'spatial',
+        reference: {
+          mode: 'semantic',
+          groupLabel: '房子',
+        },
+        relation: 'right-of',
+        sourceText: '把树放到房子右边',
+      },
+      [
+        {
+          id: 'house-1',
+          label: '左侧的房子（house-1，2个部件）',
+          target: {
+            mode: 'semantic',
+            groupId: 'house-1',
+            groupLabel: '房子',
+          },
+        },
+        {
+          id: 'house-2',
+          label: '右侧的房子（house-2，2个部件）',
+          target: {
+            mode: 'semantic',
+            groupId: 'house-2',
+            groupLabel: '房子',
+          },
+        },
+      ],
+      '把树放到房子右边',
+      'reference',
+    )
+
+    expect(resolveClarificationResponse('第二个', pending!)).toMatchObject({
+      action: 'move',
+      target: {
+        mode: 'semantic',
+        groupLabel: '树',
+      },
+      mode: 'spatial',
+      reference: {
+        mode: 'semantic',
+        groupId: 'house-2',
+        groupLabel: '房子',
+      },
+    })
+  })
+
   it('uses target filters to clarify a pending command', () => {
     const pending = createPendingClarification(
       moveYellowCircleCommand,

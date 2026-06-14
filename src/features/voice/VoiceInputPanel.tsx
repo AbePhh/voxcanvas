@@ -223,6 +223,7 @@ export function VoiceInputPanel({
                     clarifiedCommand,
                     clarifiedFeedback.candidates,
                     commandText,
+                    clarifiedFeedback.role,
                   )
                 : null,
             )
@@ -301,6 +302,7 @@ export function VoiceInputPanel({
                     result.command,
                     plannedTargetFeedback.candidates,
                     commandText,
+                    plannedTargetFeedback.role,
                   )
                 : null,
             )
@@ -356,6 +358,7 @@ export function VoiceInputPanel({
                   localCommand,
                   localTargetFeedback.candidates,
                   commandText,
+                  localTargetFeedback.role,
                 )
               : null,
           )

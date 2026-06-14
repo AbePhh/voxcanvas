@@ -839,6 +839,301 @@ describe('canvasOperations', () => {
     expect(moved.selectedGroupId).toBe('tree-2')
   })
 
+  it('moves a semantic group beside a reference group without changing height by default', () => {
+    const scene: CanvasState = {
+      ...baseCanvas,
+      shapes: [
+        {
+          id: 'house-wall',
+          type: 'rect',
+          x: 300,
+          y: 260,
+          width: 180,
+          height: 140,
+          fill: '#f97316',
+          stroke: '#9a3412',
+          groupId: 'house-1',
+          groupLabel: '房子',
+          partLabel: '墙体',
+        },
+        {
+          id: 'tree-trunk',
+          type: 'rect',
+          x: 100,
+          y: 320,
+          width: 40,
+          height: 80,
+          fill: '#f97316',
+          stroke: '#9a3412',
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树干',
+        },
+        {
+          id: 'tree-crown',
+          type: 'circle',
+          x: 70,
+          y: 240,
+          width: 100,
+          height: 100,
+          fill: '#22c55e',
+          stroke: '#166534',
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树冠',
+        },
+      ],
+    }
+
+    const moved = applyMoveCommand(scene, {
+      action: 'move',
+      target: { mode: 'semantic', groupLabel: '树' },
+      mode: 'spatial',
+      reference: { mode: 'semantic', groupLabel: '房子' },
+      relation: 'right-of',
+      align: 'preserve',
+      gap: 24,
+      sourceText: '把树放到房子右边',
+    })
+    const movedTree = moved.shapes.filter((shape) => shape.groupLabel === '树')
+    const treeLeft = Math.min(...movedTree.map((shape) => shape.x))
+    const treeBottom = Math.max(...movedTree.map((shape) => shape.y + shape.height))
+
+    expect(treeLeft).toBe(504)
+    expect(treeBottom).toBe(400)
+    expect(Math.min(...movedTree.map((shape) => shape.y))).toBe(240)
+    expect(moved.shapes.find((shape) => shape.groupLabel === '房子')?.x).toBe(300)
+    expect(moved.selectedGroupId).toBe('tree-1')
+  })
+
+  it('moves one semantic object above another with centered alignment', () => {
+    const scene: CanvasState = {
+      ...baseCanvas,
+      shapes: [
+        {
+          id: 'cloud-body',
+          type: 'circle',
+          x: 420,
+          y: 260,
+          width: 160,
+          height: 80,
+          fill: '#ffffff',
+          stroke: '#94a3b8',
+          groupId: 'cloud-1',
+          groupLabel: '云',
+        },
+        {
+          id: 'sun-body',
+          type: 'circle',
+          x: 80,
+          y: 80,
+          width: 96,
+          height: 96,
+          fill: '#facc15',
+          stroke: '#ca8a04',
+          groupId: 'sun-1',
+          groupLabel: '太阳',
+        },
+      ],
+    }
+
+    const moved = applyMoveCommand(scene, {
+      action: 'move',
+      target: { mode: 'semantic', groupLabel: '太阳' },
+      mode: 'spatial',
+      reference: { mode: 'semantic', groupLabel: '云' },
+      relation: 'above',
+      align: 'center',
+      gap: 16,
+      sourceText: '把太阳放到云上方',
+    })
+    const sun = moved.shapes.find((shape) => shape.groupLabel === '太阳')
+
+    expect(sun?.x).toBe(452)
+    expect(sun?.y).toBe(148)
+  })
+
+  it('can align the bottom edge of a group to a reference line', () => {
+    const scene: CanvasState = {
+      ...baseCanvas,
+      shapes: [
+        {
+          id: 'horizon',
+          type: 'line',
+          x: 180,
+          y: 420,
+          width: 600,
+          height: 0,
+          fill: 'transparent',
+          stroke: '#334155',
+          strokeWidth: 4,
+          groupId: 'horizon-1',
+          groupLabel: '水平线',
+        },
+        {
+          id: 'tree-trunk',
+          type: 'rect',
+          x: 80,
+          y: 260,
+          width: 40,
+          height: 90,
+          fill: '#f97316',
+          stroke: '#9a3412',
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树干',
+        },
+        {
+          id: 'tree-crown',
+          type: 'circle',
+          x: 50,
+          y: 180,
+          width: 100,
+          height: 100,
+          fill: '#22c55e',
+          stroke: '#166534',
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树冠',
+        },
+      ],
+    }
+
+    const moved = applyMoveCommand(scene, {
+      action: 'move',
+      target: { mode: 'semantic', groupLabel: '树' },
+      mode: 'spatial',
+      reference: { mode: 'semantic', groupLabel: '水平线' },
+      relation: 'above',
+      align: 'preserve',
+      gap: 0,
+      sourceText: '让树的底部贴着水平线',
+    })
+    const movedTree = moved.shapes.filter((shape) => shape.groupLabel === '树')
+    const treeBottom = Math.max(...movedTree.map((shape) => shape.y + shape.height))
+
+    expect(treeBottom).toBe(420)
+    expect(Math.min(...movedTree.map((shape) => shape.x))).toBe(50)
+  })
+
+  it('moves the whole semantic group when aligning a tree above the ground', () => {
+    const scene: CanvasState = {
+      ...baseCanvas,
+      shapes: [
+        {
+          id: 'ground',
+          type: 'line',
+          x: 120,
+          y: 460,
+          width: 720,
+          height: 0,
+          fill: 'transparent',
+          stroke: '#166534',
+          strokeWidth: 5,
+          groupId: 'ground-1',
+          groupLabel: '地面',
+          partLabel: '地平线',
+        },
+        {
+          id: 'tree-trunk',
+          type: 'rect',
+          x: 210,
+          y: 350,
+          width: 44,
+          height: 100,
+          fill: '#f97316',
+          stroke: '#9a3412',
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树干',
+        },
+        {
+          id: 'tree-crown',
+          type: 'circle',
+          x: 165,
+          y: 250,
+          width: 134,
+          height: 134,
+          fill: '#22c55e',
+          stroke: '#166534',
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树冠',
+        },
+      ],
+    }
+
+    const moved = applyMoveCommand(scene, {
+      action: 'move',
+      target: { mode: 'semantic', groupLabel: '树' },
+      mode: 'spatial',
+      reference: { mode: 'semantic', groupLabel: '地面' },
+      relation: 'above',
+      align: 'preserve',
+      gap: 0,
+      sourceText: '把这颗树移动到地面的上方',
+    })
+    const trunk = moved.shapes.find((shape) => shape.id === 'tree-trunk')
+    const crown = moved.shapes.find((shape) => shape.id === 'tree-crown')
+
+    expect(trunk?.x).toBe(210)
+    expect(trunk?.y).toBe(360)
+    expect(crown?.x).toBe(165)
+    expect(crown?.y).toBe(260)
+    expect(trunk?.y).not.toBe(scene.shapes.find((shape) => shape.id === 'tree-trunk')?.y)
+    expect(crown?.y).not.toBe(scene.shapes.find((shape) => shape.id === 'tree-crown')?.y)
+  })
+
+  it('moves both trunk and crown for a whole-tree relative move', () => {
+    const scene: CanvasState = {
+      ...baseCanvas,
+      shapes: [
+        {
+          id: 'tree-trunk',
+          type: 'rect',
+          x: 210,
+          y: 350,
+          width: 44,
+          height: 100,
+          fill: '#f97316',
+          stroke: '#9a3412',
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树干',
+        },
+        {
+          id: 'tree-crown',
+          type: 'circle',
+          x: 165,
+          y: 250,
+          width: 134,
+          height: 134,
+          fill: '#22c55e',
+          stroke: '#166534',
+          groupId: 'tree-1',
+          groupLabel: '树',
+          partLabel: '树冠',
+        },
+      ],
+    }
+
+    const moved = applyMoveCommand(scene, {
+      action: 'move',
+      target: { mode: 'semantic', groupLabel: '树' },
+      mode: 'relative',
+      direction: 'right',
+      distance: 48,
+      sourceText: '把这棵树往右边移动一点',
+    })
+
+    expect(moved.shapes).toEqual(
+      scene.shapes.map((shape) => ({
+        ...shape,
+        x: shape.x + 48,
+      })),
+    )
+  })
+
   it('fits slightly out-of-bounds scene elements into the canvas', () => {
     const scene = applySceneCommand(baseCanvas, {
       action: 'scene',

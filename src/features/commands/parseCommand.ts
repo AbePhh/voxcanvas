@@ -12,7 +12,7 @@ import type {
   CanvasResizeAnchor,
   CanvasResizeDirection,
   ExportFormat,
-  MoveShapeCommand,
+  MoveDirection,
   ParsedCommand,
 } from './types'
 import type { ShapeKind } from '../canvas/types'
@@ -217,7 +217,7 @@ function detectCreateAction(text: string) {
   return undefined
 }
 
-function detectMoveDirection(text: string): MoveShapeCommand['direction'] {
+function detectMoveDirection(text: string): MoveDirection | undefined {
   if (includesAny(text, ['往左', '向左', '左移', '左挪'])) {
     return 'left'
   }

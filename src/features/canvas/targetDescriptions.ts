@@ -16,6 +16,8 @@ export type TargetCandidate = {
   target?: CommandTarget
 }
 
+export type TargetFeedbackRole = 'target' | 'reference'
+
 export type TargetFeedback =
   | {
       status: 'ok'
@@ -23,11 +25,13 @@ export type TargetFeedback =
   | {
       status: 'missing'
       message: string
+      role: TargetFeedbackRole
     }
   | {
       status: 'ambiguous'
       message: string
       candidates: TargetCandidate[]
+      role: TargetFeedbackRole
     }
 
 function detectShapeColor(shape: ShapeObject) {
@@ -190,6 +194,45 @@ function createTargetCandidates(
   }))
 }
 
+function createSelectionFeedback(
+  target: CommandTarget,
+  canvasState: CanvasState,
+  options: { subject: '目标' | '参照物'; role: TargetFeedbackRole },
+): TargetFeedback {
+  const result = resolveTargetSelection(canvasState, target)
+
+  if (result.status === 'matched') {
+    return {
+      status: 'ok',
+    }
+  }
+
+  const targetText = describeTarget(target)
+
+  if (result.status === 'missing') {
+    return {
+      status: 'missing',
+      message:
+        options.subject === '参照物'
+          ? `没有找到作为参照物的${targetText}。请先创建它，或者换一个已有对象作为参照。`
+          : `没有找到匹配的${targetText}。请重新描述目标，或者先选中要编辑的图形。`,
+      role: options.role,
+    }
+  }
+
+  const candidates = createTargetCandidates(result.matches, canvasState, target)
+
+  return {
+    status: 'ambiguous',
+    message:
+      options.subject === '参照物'
+        ? `找到 ${candidates.length} 个可作为参照物的${targetText}，请说得更具体一些。`
+        : `找到 ${candidates.length} 个匹配的${targetText}，请说得更具体一些。`,
+    candidates,
+    role: options.role,
+  }
+}
+
 export function createTargetFeedback(
   command: ParsedCommand,
   canvasState: CanvasState,
@@ -200,28 +243,23 @@ export function createTargetFeedback(
     }
   }
 
-  const result = resolveTargetSelection(canvasState, command.target)
+  const targetFeedback = createSelectionFeedback(command.target, canvasState, {
+    subject: '目标',
+    role: 'target',
+  })
 
-  if (result.status === 'matched') {
-    return {
-      status: 'ok',
-    }
+  if (targetFeedback.status !== 'ok') {
+    return targetFeedback
   }
 
-  const targetText = describeTarget(command.target)
-
-  if (result.status === 'missing') {
-    return {
-      status: 'missing',
-      message: `没有找到匹配的${targetText}。请重新描述目标，或者先选中要编辑的图形。`,
-    }
+  if (command.action === 'move' && command.mode === 'spatial') {
+    return createSelectionFeedback(command.reference, canvasState, {
+      subject: '参照物',
+      role: 'reference',
+    })
   }
-
-  const candidates = createTargetCandidates(result.matches, canvasState, command.target)
 
   return {
-    status: 'ambiguous',
-    message: `找到 ${candidates.length} 个匹配的${targetText}，请说得更具体一些。`,
-    candidates,
+    status: 'ok',
   }
 }
