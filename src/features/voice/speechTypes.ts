@@ -4,6 +4,7 @@ export type VoiceInputState = {
   supportStatus: SpeechSupportStatus
   isListening: boolean
   transcript: string
+  transcriptId: number
   interimTranscript: string
   errorMessage: string
 }
